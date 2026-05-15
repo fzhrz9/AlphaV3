@@ -71,7 +71,7 @@ def analyze_sweet_spot(coin_data):
     return True
 
 # =====================================================================
-# 3. MODUL AI VIP INSIGHTS (GROQ)
+# 3. MODUL AI VIP INSIGHTS (GROQ UPGRADED & CLEANED)
 # =====================================================================
 def get_ai_vip_report(coin):
     if not groq_client:
@@ -89,14 +89,16 @@ def get_ai_vip_report(coin):
     
     try:
         response = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            # 🔥 MODEL TERBARU GROQ (Llama 3.3 Versatile - Laju & Bijak)
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": "You are a Senior Hedge Fund Analyst."},
                       {"role": "user", "content": prompt}],
             temperature=0.6
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ *AI Error:* {e}"
+        # 🔥 MESEJ RALAT DIBERSIHKAN (Supaya tak break format Telegram)
+        return "❌ *AI Insight Unavailable:* Enjin forensik sedang dikemaskini. Sila rujuk metrik teknikal di atas."
 
 # =====================================================================
 # 4. BROADCAST & INTERFACE (FORMAT KEKAL)
