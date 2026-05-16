@@ -9,7 +9,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # =====================================================================
-# 1. KONFIGURASI & API KEYS (ALPHA V4 - THE QUANT SNIPER)
+# 1. KONFIGURASI & API KEYS (ALPHA V4 - PURE ON-CHAIN SNIPER)
 # =====================================================================
 TELEGRAM_BOT_TOKEN = "8673710597:AAGD4I53588YSL1QK9ZllzlaeQY68gFttSQ"
 VIP_CHANNEL_ID = "-1003943365561"
@@ -20,7 +20,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 IS_SCANNING = True
 CURRENT_ENGINE = 1  
 
-# PARAMETER PENAPISAN MUTLAK
+# PARAMETER PENAPISAN (PURE PRICE ACTION)
 MC_MIN, MC_MAX = 5000000, 500000000
 MIN_LIQUIDITY = 250000
 MIN_VOL_MC_RATIO = 0.10
@@ -35,7 +35,7 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS (DEXSCREENER + AGE)
+# 2. LIVE API FETCHERS (COINGECKO & DEXSCREENER)
 # =====================================================================
 def get_trending_categories():
     try:
@@ -62,6 +62,7 @@ def get_dexscreener_data(contract_address):
             # Umur Koin (Live)
             created_at = pair.get('pairCreatedAt', 0)
             age_days = (int(time.time() * 1000) - created_at) / (1000 * 60 * 60 * 24) if created_at else 0
+            age_display = f"{int(age_days)} Hari" if age_days >= 1 else f"{int(age_days * 24)} Jam"
             
             # Pautan Dinamik
             info = pair.get('info', {})
@@ -79,12 +80,11 @@ def get_dexscreener_data(contract_address):
                 'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
                 'price_change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
                 'price_change_1h': float(pair.get('priceChange', {}).get('h1', 0)),
+                'price_change_5m': float(pair.get('priceChange', {}).get('m5', 0)), # Data M5 yang Super Pantas
                 'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
                 'network': chain_id.capitalize(),
                 'chain_raw': chain_id, 
-                'buy_vol': pair.get('txns', {}).get('h24', {}).get('buys', 0),
-                'sell_vol': pair.get('txns', {}).get('h24', {}).get('sells', 0),
-                'age_days': max(0, int(age_days)),
+                'age_display': age_display,
                 'website': website_url,
                 'twitter_official': twitter_url,
                 'telegram': telegram_url
@@ -92,68 +92,8 @@ def get_dexscreener_data(contract_address):
         return None
     except: return None
 
-def smart_cg_search(symbol, name):
-    try:
-        res = requests.get(f"https://api.coingecko.com/api/v3/search?query={symbol}").json()
-        if res.get('coins'):
-            for coin in res['coins']:
-                if coin['symbol'].upper() == symbol.upper() and (name.lower() in coin['name'].lower() or coin['name'].lower() in name.lower()):
-                    return coin['id']
-            return res['coins'][0]['id']
-    except: pass
-    return None
-
 # =====================================================================
-# 3. KIRAAN TEKNIKAL MUTLAK (FIBO 7H & RSI 1H DARI COINGECKO)
-# =====================================================================
-def calculate_real_technicals(coin_id, current_price):
-    try:
-        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc?vs_currency=usd&days=7"
-        res = requests.get(url, timeout=10).json()
-        
-        if not isinstance(res, list) or len(res) < 14:
-            return "N/A ⚠️", "N/A ⚠️", "PENDING", False, False
-
-        closes = [candle[4] for candle in res]
-        highs = [candle[2] for candle in res]
-        lows = [candle[3] for candle in res]
-
-        # KIRAAN RSI
-        recent_closes = closes[-15:]
-        gains, losses = [], []
-        for i in range(1, len(recent_closes)):
-            change = recent_closes[i] - recent_closes[i-1]
-            if change > 0: gains.append(change); losses.append(0)
-            else: gains.append(0); losses.append(abs(change))
-                
-        avg_gain = sum(gains) / 14 if gains else 0
-        avg_loss = sum(losses) / 14 if losses else 0
-        rsi = 100 if avg_loss == 0 else 100 - (100 / (1 + (avg_gain / avg_loss)))
-        rsi_txt = f"{rsi:.1f} {'🟢' if rsi < 50 else '🔴'}"
-
-        # KIRAAN FIBO
-        swing_high, swing_low = max(highs), min(lows)
-        diff = swing_high - swing_low
-        fibo_650 = swing_high - (0.65 * diff)
-        fibo_500 = swing_high - (0.5 * diff)
-        zone = sorted([fibo_650, fibo_500])
-        
-        in_zone = zone[0] <= current_price <= zone[1]
-        fibo_txt = f"${zone[0]:.4f} - ${zone[1]:.4f} {'🎯' if in_zone else '⏳'}"
-
-        confluence_pass = False
-        if in_zone and rsi < 50: 
-            verdict = "STRONG BUY 🟢"
-            confluence_pass = True
-        elif not in_zone: verdict = "WAITING PULLBACK 🟡"
-        else: verdict = "RSI TOO HOT 🔴"
-
-        return rsi_txt, fibo_txt, verdict, in_zone, confluence_pass
-    except:
-        return "Error", "Error", "DATA ERROR", False, False
-
-# =====================================================================
-# 4. PENAPISAN & LIVE SECURITY API (MENGGANTIKAN STATIK PALSU)
+# 3. PENAPISAN & LIVE SECURITY API (THE SNIPER LOGIC)
 # =====================================================================
 def verify_security_live(network, contract_address):
     """Memanggil API sekuriti sebenar dengan failsafe 3 saat"""
@@ -168,21 +108,25 @@ def verify_security_live(network, contract_address):
     except:
         return {"status": "✅ VERIFIED", "provider": "Auto-Check"}
 
-def execute_confluence_protocol(dex_data, coin_id):
-    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False, "Gagal Fasa 1"
-    if dex_data['liquidity'] < MIN_LIQUIDITY: return False, "Gagal Fasa 1"
-    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False, "Gagal Fasa 2"
-    if dex_data['sell_vol'] > dex_data['buy_vol']: return False, "Gagal Fasa 2"
-    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False, "Gagal Fasa 3"
-    if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False, "Gagal Fasa 3"
-    _, _, _, _, confluence = calculate_real_technicals(coin_id, dex_data['price_usd'])
-    if not confluence: return False, "Gagal Fasa 4"
-    return True, "🔥 LULUS SEMUA FASA! 🔥"
+def execute_sniper_protocol(dex_data):
+    """Penapisan Pure On-Chain (Tanpa RSI/Fibo)"""
+    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False, "Gagal: MCap tak sesuai"
+    if dex_data['liquidity'] < MIN_LIQUIDITY: return False, "Gagal: Liquidity rendah"
+    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False, "Gagal: Vol < 10% MCap"
+    
+    # MOMENTUM VELOCITY CHECK
+    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False, "Gagal: Trend Induk < 5%"
+    if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False, "Gagal: 1H Pullback tak ngam"
+    
+    # THE REVERSAL TRIGGER (5-MINIT)
+    if dex_data['price_change_5m'] <= 0: return False, "Gagal: Belum ada pantulan (M5 Negatif)"
+
+    return True, "🔥 THE SNIPER ENTRY DETECTED! 🔥"
 
 # =====================================================================
-# 5. ALGO TRADE SETUP MATHS & BROADCAST UI (ALL BOLD HEADERS)
+# 4. ALGO TRADE SETUP MATHS & BROADCAST UI (BOLD & PURE DATA)
 # =====================================================================
-def send_signal(coin_info, dex_data, rsi_txt, fibo_txt, verdict, target_chat_id=VIP_CHANNEL_ID):
+def send_signal(coin_info, dex_data, verdict, target_chat_id=VIP_CHANNEL_ID):
     sec = verify_security_live(dex_data['network'], coin_info['contract_address'])
     is_sol = dex_data['network'].lower() in ['solana', 'sol']
     
@@ -197,26 +141,27 @@ def send_signal(coin_info, dex_data, rsi_txt, fibo_txt, verdict, target_chat_id=
     tp2 = entry * 1.25 # +25%
     tp3 = entry * 1.50 # +50%
     
-    # Kiraan Dominasi
-    tot_buys = max(dex_data['buy_vol'], 1)
-    tot_sells = max(dex_data['sell_vol'], 1)
-    dom_ratio = tot_buys / tot_sells
+    # Order Flow (Capital Turnover Ratio) -> Volume / Liquidity
+    liq = max(dex_data['liquidity'], 1)
+    turnover_ratio = dex_data['volume_24h'] / liq
 
     trend_sign = "+" if dex_data['price_change_24h'] >= 0 else ""
+    m5_sign = "+" if dex_data['price_change_5m'] >= 0 else ""
 
-    # SEMUA TAJUK DAN SUB-TAJUK DIBOLD-KAN SEPENUHNYA
+    # SEMUA TAJUK DIBOLD-KAN (RSI/FIBO DIBUANG GANTI VELOCITY)
     msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
 
 **Asset Identified :** **{coin_info['name']}** (`${coin_info['symbol'].upper()}`)
 **Contract :** `{coin_info['contract_address']}`
 
 📈 **MARKET METRICS (LIVE)**
-• **Market Cap :** `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank :** `#{coin_info.get('market_cap_rank', 'N/A')}`
+• **Valuation (FDV) :** `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank :** `#{coin_info.get('market_cap_rank', 'N/A')}`
 • **Trend 24H :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 | **Vol 24H :** `${dex_data['volume_24h'] / 1e6:.1f}M` 🟢
 
-📊 **TECHNICAL INTEL (7-DAY LIVE)**
-• **Momentum (RSI 14) :** **{rsi_txt}**
-• **Pullback (Fibo) :** **{fibo_txt}**
+📊 **MOMENTUM VELOCITY (ON-CHAIN)**
+• **Macro (24H) :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 *(Bullish)*
+• **Micro (1H) :** `{dex_data['price_change_1h']}%` 🔴 *(Pullback)*
+• **Sniper (5M) :** `{m5_sign}{dex_data['price_change_5m']}%` 🟢 *(Reversal)*
 
 🎯 **TRADE SETUP (ALGO-GENERATED)**
 • **ENTRY ZONE :** `${entry:.6f}`
@@ -226,13 +171,13 @@ def send_signal(coin_info, dex_data, rsi_txt, fibo_txt, verdict, target_chat_id=
 • **TAKE PROFIT 3 :** `${tp3:.6f}` `(+50%)` 🚀
 
 🌊 **ORDER FLOW & SECURITY**
-• **Verdict Flow :** **{verdict}** ({dom_ratio:.1f}x Dominasi Pembeli)
-• **Token Age :** **{dex_data['age_days']} Hari**
+• **Turnover Ratio :** **{turnover_ratio:.1f}x** Volume/Liquidity 🔥
+• **Token Age :** **{dex_data['age_display']}**
 • **Network :** **{dex_data['network']}** | **Liquidity :** `${dex_data['liquidity'] / 1e6:.1f}M` 🟢
 • **Live Audit :** **{sec['status']}** ({sec['provider']})
 
 ⚡ **VERDICT :** **{verdict}**
-_Optimal entry divalidasi oleh data Live OHLC & market liquidity._
+_Entry divalidasi oleh momentum pantulan M5 & capital turnover._
 """
     markup = InlineKeyboardMarkup(row_width=2)
     markup.add(InlineKeyboardButton(buy_bot_name, url=buy_bot_link))
@@ -258,7 +203,7 @@ _Optimal entry divalidasi oleh data Live OHLC & market liquidity._
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 6. ENJIN PENGIMBAS SEBENAR
+# 5. ENJIN PENGIMBAS SEBENAR
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -268,13 +213,15 @@ def run_live_scan(categories):
         for coin in coins:
             ca = next((addr for chain, addr in coin.get('platforms', {}).items() if addr and isinstance(addr, str) and len(addr) > 20), None)
             if not ca: continue
+            
             dex_data = get_dexscreener_data(ca)
             if not dex_data: continue
-            passed, reason = execute_confluence_protocol(dex_data, coin['id'])
+            
+            passed, reason = execute_sniper_protocol(dex_data)
             if passed:
-                rsi, fibo, ver, _, _ = calculate_real_technicals(coin['id'], dex_data['price_usd'])
+                ver = "THE SNIPER ENTRY 🎯"
                 c_info = {'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'], 'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')}
-                send_signal(c_info, dex_data, rsi, fibo, ver, target_chat_id=VIP_CHANNEL_ID)
+                send_signal(c_info, dex_data, ver, target_chat_id=VIP_CHANNEL_ID)
         time.sleep(2) 
 
 def main_job():
@@ -285,7 +232,7 @@ def main_job():
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
 # =====================================================================
-# 7. TELEGRAM COMMANDS
+# 6. TELEGRAM COMMANDS
 # =====================================================================
 @bot.message_handler(commands=['scan'])
 def cmd_scan(message): bot.reply_to(message, "⏳ Scan manual..."); threading.Thread(target=main_job).start()
@@ -303,12 +250,11 @@ def cmd_ca(message):
         bot.reply_to(message, f"⚙️ DD untuk CA:\n`{address}`", parse_mode="Markdown")
         dex_data = get_dexscreener_data(address)
         if dex_data:
-            cg_id = smart_cg_search(dex_data['symbol'], dex_data['name'])
-            if cg_id: rsi, fibo, ver, _, _ = calculate_real_technicals(cg_id, dex_data['price_usd'])
-            else: rsi, fibo, ver = "N/A ⚠️", "N/A ⚠️", "PENDING"
-            c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': cg_id or 'custom', 'contract_address': address, 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
-            send_signal(c_info, dex_data, rsi, fibo, ver, target_chat_id=message.chat.id)
-        else: bot.reply_to(message, "❌ Data gagal.")
+            # Bypass untuk semakan manual
+            ver = "MANUAL DD 🔍"
+            c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': address, 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
+            send_signal(c_info, dex_data, ver, target_chat_id=message.chat.id)
+        else: bot.reply_to(message, "❌ Data gagal ditarik.")
     except Exception as e: bot.reply_to(message, f"❌ Format salah.", parse_mode="Markdown")
 
 class RenderHandler(BaseHTTPRequestHandler):
@@ -318,7 +264,7 @@ class RenderHandler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
     threading.Thread(target=lambda: (schedule.every(15).minutes.do(lambda: threading.Thread(target=main_job).start()), [schedule.run_pending() or time.sleep(1) for _ in iter(int, 1)]), daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 ACTIVATED**\nTrade Setup Algoritma, RSI/Fibo Live, dan Security Audit Real-time telah dimuatkan.")
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 ACTIVATED**\nModul Pure On-Chain Velocity dimuatkan. Kelewatan dikurangkan.")
     except: pass
     threading.Thread(target=main_job).start()
     bot.infinity_polling()
