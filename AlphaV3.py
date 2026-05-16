@@ -38,7 +38,6 @@ CORE_NARRATIVES = [
 # 2. LIVE API FETCHERS (COINGECKO & DEXSCREENER)
 # =====================================================================
 def get_trending_categories():
-    """Enjin 2: Cari Top 3 sektor paling pump 24 jam lepas"""
     try:
         url = "https://api.coingecko.com/api/v3/coins/categories"
         res = requests.get(url).json()
@@ -48,7 +47,6 @@ def get_trending_categories():
         return []
 
 def get_coins_in_category(category_id):
-    """Tarik senarai koin dalam sesuatu kategori (Limit 10 untuk kelajuan)"""
     try:
         url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category={category_id}&order=market_cap_desc&per_page=10&page=1"
         res = requests.get(url).json()
@@ -57,12 +55,10 @@ def get_coins_in_category(category_id):
         return []
 
 def get_dexscreener_data(contract_address):
-    """Tarik data live (Volume, Liquidity, 1H/24H change) dari rantaian sebenar"""
     try:
         url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
         res = requests.get(url).json()
         if res.get('pairs'):
-            # Ambil pair yang paling tinggi liquidity
             pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
             return {
                 'price_usd': float(pair.get('priceUsd', 0)),
@@ -83,7 +79,6 @@ def get_dexscreener_data(contract_address):
 # 3. MODUL KESELAMATAN (ROUTER)
 # =====================================================================
 def verify_security(network, contract_address):
-    # Buat masa ini, API check diringkaskan untuk elak timeout limit Render
     if network.lower() in ['solana', 'sol']:
         return {"status": "✅ SECURE", "score": 100, "provider": "RugCheck"}
     else:
@@ -102,7 +97,7 @@ def analyze_sweet_spot(dex_data):
     return True
 
 # =====================================================================
-# 5. BROADCAST & INTERFACE (FORMAT LOCKED)
+# 5. BROADCAST & INTERFACE (TARGET CHAT ID DITAMBAH)
 # =====================================================================
 def send_signal(coin_info, dex_data, verdict="STRONG BUY", target_chat_id=VIP_CHANNEL_ID):
     security_data = verify_security(dex_data['network'], coin_info['contract_address'])
@@ -143,7 +138,6 @@ _Optimal entry divalidasi oleh zon Golden Pocket & aggressive buy pressure._
 [🐦 Twitter](https://twitter.com/search?q=%24{coin_info['symbol'].upper()}) [✈️ Telegram] [🌐 Website]
 [🦎 CoinGecko](https://www.coingecko.com/en/coins/{coin_info['id']}) [📊 Dexscreener](https://dexscreener.com/search?q={coin_info['contract_address']})
 """
-    # 🔥 Tukar VIP_CHANNEL_ID kepada target_chat_id
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", disable_web_page_preview=True)
 
 # =====================================================================
@@ -154,7 +148,6 @@ def run_live_scan(categories):
     for cat in categories:
         coins = get_coins_in_category(cat)
         for coin in coins:
-            # Dapatkan platforms/contract address
             platforms = coin.get('platforms', {})
             ca = None
             for chain, addr in platforms.items():
@@ -170,9 +163,10 @@ def run_live_scan(categories):
                         'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'],
                         'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')
                     }
-                    send_signal(coin_info, dex_data)
-                time.sleep(1) # Rehat 1 saat elak spam Dexscreener
-        time.sleep(3) # Rehat 3 saat elak CoinGecko Rate Limit block
+                    # Auto-scan sentiasa ke VIP Channel
+                    send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
+                time.sleep(1) 
+        time.sleep(3) 
 
 def main_job():
     global IS_SCANNING, CURRENT_ENGINE
@@ -198,7 +192,7 @@ def main_job():
 @bot.message_handler(commands=['scan'])
 def cmd_scan(message):
     bot.reply_to(message, "⏳ Memulakan imbasan LIVE pasaran serta-merta...")
-    threading.Thread(target=main_job).start() # Run dlm thread spy bot tak beku
+    threading.Thread(target=main_job).start()
 
 @bot.message_handler(commands=['stop'])
 def cmd_stop(message):
@@ -219,7 +213,7 @@ def cmd_ca(message):
         if dex_data:
             coin_info = {'name': 'Manual Asset', 'symbol': 'TOKEN', 'id': 'custom', 'contract_address': address, 'narrative': 'Manual-Check', 'market_cap_rank': 'N/A'}
             
-            # 🔥 Hantar signal terus ke message.chat.id (PM kau)
+            # 🔥 /CA MANUAL SEKARANG HANTAR TERUS KE PM KAU (message.chat.id) 🔥
             send_signal(coin_info, dex_data, verdict="MANUAL ANALYZE", target_chat_id=message.chat.id)
             
         else:
@@ -247,4 +241,4 @@ if __name__ == "__main__":
     except: pass
     threading.Thread(target=main_job).start()
     print("Bot sedia menerima arahan Telegram...")
-    bot.infinity_polling()p 
+    bot.infinity_polling()
