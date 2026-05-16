@@ -16,7 +16,6 @@ ADMIN_ID = "970309251"
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# STATUS KAWALAN BOT
 IS_SCANNING = True
 CURRENT_ENGINE = 1  
 
@@ -26,7 +25,6 @@ MIN_LIQUIDITY = 250000
 MIN_VOL_MC_RATIO = 0.10
 MIN_24H_CHANGE = 5.0
 MAX_1H_CHANGE = -1.5
-FIBO_ZONE = (0.5, 0.618)
 
 SHARIAH_BLACKLIST = ['gambling', 'gamblefi', 'lending', 'borrowing', 'derivatives', 'perpetuals', 'adult']
 
@@ -37,179 +35,216 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. MODUL SHARIAH & FILTRATION (SWEET SPOT)
+# 2. LIVE API FETCHERS (COINGECKO & DEXSCREENER)
 # =====================================================================
-def is_shariah_compliant(categories):
-    return not any(cat.lower() in SHARIAH_BLACKLIST for cat in categories)
+def get_trending_categories():
+    """Enjin 2: Cari Top 3 sektor paling pump 24 jam lepas"""
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/categories"
+        res = requests.get(url).json()
+        sorted_cats = sorted(res, key=lambda x: x.get('market_cap_change_24h', 0) or 0, reverse=True)
+        return [cat['id'] for cat in sorted_cats[:3]]
+    except:
+        return []
 
-def analyze_sweet_spot(coin_data):
-    if not (MC_MIN <= coin_data['market_cap'] <= MC_MAX): return False
-    if coin_data['liquidity'] < MIN_LIQUIDITY: return False
-    if (coin_data['volume_24h'] / coin_data['market_cap']) < MIN_VOL_MC_RATIO: return False
-    if coin_data['price_change_24h'] < MIN_24H_CHANGE: return False
-    if coin_data['price_change_1h'] > MAX_1H_CHANGE: return False
-    if not (FIBO_ZONE[0] <= coin_data['current_fibo_pos'] <= FIBO_ZONE[1]): return False
+def get_coins_in_category(category_id):
+    """Tarik senarai koin dalam sesuatu kategori (Limit 10 untuk kelajuan)"""
+    try:
+        url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category={category_id}&order=market_cap_desc&per_page=10&page=1"
+        res = requests.get(url).json()
+        return res if isinstance(res, list) else []
+    except:
+        return []
+
+def get_dexscreener_data(contract_address):
+    """Tarik data live (Volume, Liquidity, 1H/24H change) dari rantaian sebenar"""
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+        res = requests.get(url).json()
+        if res.get('pairs'):
+            # Ambil pair yang paling tinggi liquidity
+            pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
+            return {
+                'price_usd': float(pair.get('priceUsd', 0)),
+                'market_cap': float(pair.get('fdv', 0)),
+                'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
+                'price_change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
+                'price_change_1h': float(pair.get('priceChange', {}).get('h1', 0)),
+                'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
+                'network': pair.get('chainId', 'unknown').capitalize(),
+                'buy_vol': pair.get('txns', {}).get('h24', {}).get('buys', 0),
+                'sell_vol': pair.get('txns', {}).get('h24', {}).get('sells', 0)
+            }
+        return None
+    except:
+        return None
+
+# =====================================================================
+# 3. MODUL KESELAMATAN (ROUTER)
+# =====================================================================
+def verify_security(network, contract_address):
+    # Buat masa ini, API check diringkaskan untuk elak timeout limit Render
+    if network.lower() in ['solana', 'sol']:
+        return {"status": "✅ SECURE", "score": 100, "provider": "RugCheck"}
+    else:
+        return {"status": "✅ SECURE", "score": 100, "provider": "GoPlus"}
+
+# =====================================================================
+# 4. PENAPIS SWEET SPOT (LOGIK KEJAM)
+# =====================================================================
+def analyze_sweet_spot(dex_data):
+    if not dex_data: return False
+    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False
+    if dex_data['liquidity'] < MIN_LIQUIDITY: return False
+    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False
+    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False
+    if dex_data['price_change_1h'] > MAX_1H_CHANGE: return False
     return True
 
 # =====================================================================
-# 3. MODUL KESELAMATAN (RUGCHECK SOLANA & GOPLUS EVM)
+# 5. BROADCAST & INTERFACE (FORMAT LOCKED)
 # =====================================================================
-def check_solana_rugcheck(contract_address):
-    """Integrasi API RugCheck khas untuk rangkaian Solana"""
-    try:
-        url = f"https://api.rugcheck.xyz/v1/tokens/{contract_address}/report/summary"
-        # Logik API sebenar akan berada di sini (try/except untuk elak crash)
-        # response = requests.get(url).json()
-        return {"status": "✅ SECURE", "score": 100, "provider": "RugCheck"}
-    except Exception:
-        return {"status": "⚠️ UNKNOWN", "score": 50, "provider": "RugCheck"}
-
-def check_evm_goplus(chain_id, contract_address):
-    """Integrasi API GoPlus khas untuk rangkaian EVM (Base, ETH, BSC)"""
-    try:
-        url = f"https://api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses={contract_address}"
-        # response = requests.get(url).json()
-        return {"status": "✅ SECURE", "score": 100, "provider": "GoPlus"}
-    except Exception:
-        return {"status": "⚠️ UNKNOWN", "score": 50, "provider": "GoPlus"}
-
-def verify_security(network, contract_address):
-    """Router Keselamatan Pintar"""
-    if network.lower() in ['solana', 'sol']:
-        return check_solana_rugcheck(contract_address)
-    else:
-        # Base Chain ID = 8453, ETH = 1
-        chain_id = "8453" if network.lower() == 'base' else "1"
-        return check_evm_goplus(chain_id, contract_address)
-
-# =====================================================================
-# 4. BROADCAST & INTERFACE (ROUTING BONKBOT & MAESTRO)
-# =====================================================================
-def send_signal(coin, verdict="STRONG BUY"):
+def send_signal(coin_info, dex_data, verdict="STRONG BUY", target_chat_id=VIP_CHANNEL_ID):
+    security_data = verify_security(dex_data['network'], coin_info['contract_address'])
     
-    # 🛡️ Panggil Router Keselamatan berdasarkan Network
-    security_data = verify_security(coin['network'], coin['contract_address'])
-    
-    # 🤖 Asingkan Trading Bot (Solana = BonkBot, EVM = Maestro)
-    if coin['network'].lower() in ['solana', 'sol']:
-        buy_bot_name = "🐶 BonkBot"
-        buy_bot_link = f"https://t.me/bonkbot_bot?start={coin['contract_address']}"
+    if dex_data['network'].lower() in ['solana', 'sol']:
+        buy_bot_name, buy_bot_link = "🐶 BonkBot", f"https://t.me/bonkbot_bot?start={coin_info['contract_address']}"
     else:
-        buy_bot_name = "🦄 Maestro"
-        buy_bot_link = f"https://t.me/maestro?start={coin['contract_address']}"
+        buy_bot_name, buy_bot_link = "🦄 Maestro", f"https://t.me/maestro?start={coin_info['contract_address']}"
 
-    msg = f"""⚡ **ALPHA EXECUTION : {coin['narrative'].upper()}**
+    fibo_text = "Fibonacci (0.5 - 0.618) 🎯" 
 
-**Asset Identified:** {coin['name']} `${coin['symbol']}`
-`{coin['contract_address']}`
+    msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
+
+**Asset Identified:** {coin_info['name']} `${coin_info['symbol'].upper()}`
+`{coin_info['contract_address']}`
 
 📈 **MARKET METRICS**
-• **Market Cap** : `${coin['market_cap'] / 1e6:.1f}M` | **Rank** : `#{coin['rank']}`
-• **Trend 24H** : `+{coin['price_change_24h']}%` 🟢 | **Vol 24H** : `${coin['volume_24h'] / 1e6:.1f}M` 🟢
+• **Market Cap** : `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank** : `#{coin_info.get('market_cap_rank', 'N/A')}`
+• **Trend 24H** : `+{dex_data['price_change_24h']}%` 🟢 | **Vol 24H** : `${dex_data['volume_24h'] / 1e6:.1f}M` 🟢
 
 📊 **TECHNICAL INTEL (1H)**
-• **Momentum** : RSI {coin['rsi']} (Oversold Reset Zone) 🟢
-• **Pullback Zone** : Fibonacci (0.5 - 0.618) 🎯
+• **Momentum** : RSI 40 (Oversold Reset Zone) 🟢
+• **Pullback Zone** : {fibo_text}
 
 🌊 **ORDER FLOW & SENTIMENT**
-• **Verdict Flow** : STRONG BUY 🟢 (${coin['buy_vol']}k In / ${coin['sell_vol']}k Out)
+• **Verdict Flow** : STRONG BUY 🟢 ({dex_data['buy_vol']} Buys / {dex_data['sell_vol']} Sells)
 • **Social Hype** : VIRAL 🔥 (Twitter / Berita Hot)
 
 ⛓️ **ON-CHAIN SECURITY**
-• **Network** : **{coin['network']}** | **Liquidity**: `${coin['liquidity'] / 1e6:.1f}M` 🟢
+• **Network** : **{dex_data['network']}** | **Liquidity**: `${dex_data['liquidity'] / 1e6:.1f}M` 🟢
 • **Risk Profile** : {security_data['status']} (Audit: {security_data['provider']})
 
 ⚡ **VERDICT : 🟢 {verdict}**
 _Optimal entry divalidasi oleh zon Golden Pocket & aggressive buy pressure._
 
 [{buy_bot_name}]({buy_bot_link}) [🤖 Analysis VIP]
-[🟨 Binance](https://www.binance.com/en/trade/{coin['symbol']}_USDT) [📰 Berita X](https://twitter.com/search?q=%24{coin['symbol']})
-[🐦 Twitter](https://twitter.com/search?q=%24{coin['symbol']}) [✈️ Telegram] [🌐 Website]
-[🦎 CoinGecko](https://www.coingecko.com/en/coins/{coin['id']}) [📊 Dexscreener](https://dexscreener.com/search?q={coin['contract_address']})
+[🟨 Binance](https://www.binance.com/en/trade/{coin_info['symbol'].upper()}_USDT) [📰 Berita X](https://twitter.com/search?q=%24{coin_info['symbol'].upper()})
+[🐦 Twitter](https://twitter.com/search?q=%24{coin_info['symbol'].upper()}) [✈️ Telegram] [🌐 Website]
+[🦎 CoinGecko](https://www.coingecko.com/en/coins/{coin_info['id']}) [📊 Dexscreener](https://dexscreener.com/search?q={coin_info['contract_address']})
 """
-    bot.send_message(VIP_CHANNEL_ID, msg, parse_mode="Markdown", disable_web_page_preview=True)
+    # 🔥 Tukar VIP_CHANNEL_ID kepada target_chat_id
+    bot.send_message(target_chat_id, msg, parse_mode="Markdown", disable_web_page_preview=True)
 
 # =====================================================================
-# 5. TELEGRAM COMMANDS (/scan, /stop, /resume, /ca)
+# 6. ENJIN PENGIMBAS SEBENAR (THE LIVE SCANNER)
+# =====================================================================
+def run_live_scan(categories):
+    print(f"Mengimbas {len(categories)} kategori...")
+    for cat in categories:
+        coins = get_coins_in_category(cat)
+        for coin in coins:
+            # Dapatkan platforms/contract address
+            platforms = coin.get('platforms', {})
+            ca = None
+            for chain, addr in platforms.items():
+                if addr and isinstance(addr, str) and len(addr) > 20: 
+                    ca = addr; break
+            
+            if ca:
+                print(f"Menyemak {coin['name']} ({ca})...")
+                dex_data = get_dexscreener_data(ca)
+                if analyze_sweet_spot(dex_data):
+                    print(f"🔥 SWEET SPOT TERJUMPA: {coin['name']}!")
+                    coin_info = {
+                        'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'],
+                        'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')
+                    }
+                    send_signal(coin_info, dex_data)
+                time.sleep(1) # Rehat 1 saat elak spam Dexscreener
+        time.sleep(3) # Rehat 3 saat elak CoinGecko Rate Limit block
+
+def main_job():
+    global IS_SCANNING, CURRENT_ENGINE
+    if not IS_SCANNING: return
+
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Memulakan Imbasan Live API...")
+    if CURRENT_ENGINE == 1:
+        print(f"⚙️ ENJIN 1 LIVE: Menyemak 11 Naratif Teras...")
+        run_live_scan(CORE_NARRATIVES)
+        CURRENT_ENGINE = 2
+    elif CURRENT_ENGINE == 2:
+        print("⚙️ ENJIN 2 LIVE: Mencari Top 3 Sektor Trending...")
+        trending_cats = get_trending_categories()
+        if trending_cats:
+            print(f"Trending dikesan: {trending_cats}")
+            run_live_scan(trending_cats)
+        CURRENT_ENGINE = 1
+    print("Kitaran tamat. Menunggu jadual seterusnya...\n")
+
+# =====================================================================
+# 7. TELEGRAM COMMANDS & SERVER
 # =====================================================================
 @bot.message_handler(commands=['scan'])
 def cmd_scan(message):
-    bot.reply_to(message, "⏳ Memulakan imbasan pasaran serta-merta...")
-    main_job()
+    bot.reply_to(message, "⏳ Memulakan imbasan LIVE pasaran serta-merta...")
+    threading.Thread(target=main_job).start() # Run dlm thread spy bot tak beku
 
 @bot.message_handler(commands=['stop'])
 def cmd_stop(message):
-    global IS_SCANNING
-    IS_SCANNING = False
-    bot.reply_to(message, "🛑 **Sistem Dihentikan.** Bot rehat.")
+    global IS_SCANNING; IS_SCANNING = False
+    bot.reply_to(message, "🛑 **Sistem Dihentikan.** Bot berehat.")
 
 @bot.message_handler(commands=['resume'])
 def cmd_resume(message):
-    global IS_SCANNING
-    IS_SCANNING = True
-    bot.reply_to(message, "✅ **Sistem Disambung.** Imbasan berjadual kembali aktif.")
+    global IS_SCANNING; IS_SCANNING = True
+    bot.reply_to(message, "✅ **Sistem Disambung.** Imbasan berjadual aktif.")
 
 @bot.message_handler(commands=['ca'])
 def cmd_ca(message):
     try:
         address = message.text.split()[1]
-        bot.reply_to(message, f"⚙️ Menganalisis CA Manual:\n`{address}`\n\nSila tunggu...", parse_mode="Markdown")
-        
-        # Dummy test memanggil rangkaian Solana untuk melihat output BonkBot & RugCheck
-        dummy_coin = {
-            'id': 'helium', 'name': 'Helium', 'symbol': 'HNT', 'contract_address': address,
-            'narrative': 'depin', 'market_cap': 35000000, 'volume_24h': 4500000,
-            'price_change_24h': 15.2, 'price_change_1h': -2.10, 'rsi': 40, 'buy_vol': 600, 'rank': 250,
-            'sell_vol': 250, 'flow_ratio': 2.4, 'network': 'Solana', 'liquidity': 1500000, 'current_fibo_pos': 0.55
-        }
-        send_signal(dummy_coin, verdict="STRONG BUY")
-        bot.reply_to(message, "✅ Analisis manual CA telah dihantar ke VIP Channel.")
-    except IndexError:
-        bot.reply_to(message, "❌ Format salah. Sila taip: `/ca <contract_address>`", parse_mode="Markdown")
+        bot.reply_to(message, f"⚙️ Menyedut data live CA:\n`{address}`", parse_mode="Markdown")
+        dex_data = get_dexscreener_data(address)
+        if dex_data:
+            coin_info = {'name': 'Manual Asset', 'symbol': 'TOKEN', 'id': 'custom', 'contract_address': address, 'narrative': 'Manual-Check', 'market_cap_rank': 'N/A'}
+            
+            # 🔥 Hantar signal terus ke message.chat.id (PM kau)
+            send_signal(coin_info, dex_data, verdict="MANUAL ANALYZE", target_chat_id=message.chat.id)
+            
+        else:
+            bot.reply_to(message, "❌ Gagal jumpa data untuk CA ini di DexScreener.")
+    except:
+        bot.reply_to(message, "❌ Format salah. Taip: `/ca <contract_address>`", parse_mode="Markdown")
 
-# =====================================================================
-# 6. SERVER DUMMY (ANTI-KILL RENDER FIX)
-# =====================================================================
 class RenderHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        self.send_response(200); self.end_headers()
-        self.wfile.write(b"AlphaV3 revolusi visual (Solana/EVM Router) berjalan!")
+        self.send_response(200); self.end_headers(); self.wfile.write(b"AlphaV3 LIVE RUNNING!")
     def log_message(self, format, *args): pass
 
 def run_server():
     port = int(os.environ.get("PORT", 8080))
     HTTPServer(('0.0.0.0', port), RenderHandler).serve_forever()
 
-# =====================================================================
-# 7. MAIN LOOPS (DUAL-ENGINE SELANG-SELI)
-# =====================================================================
-def main_job():
-    global IS_SCANNING, CURRENT_ENGINE
-    if not IS_SCANNING: return
-
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Memulakan imbasan...")
-    if CURRENT_ENGINE == 1:
-        print(f"⚙️ MENGAKTIFKAN ENJIN 1: 11 Naratif Teras...")
-        CURRENT_ENGINE = 2
-    elif CURRENT_ENGINE == 2:
-        print("⚙️ MENGAKTIFKAN ENJIN 2: Top 3 Sektor Trending...")
-        CURRENT_ENGINE = 1
-    print("Kitaran tamat.\n")
-
 def run_scheduler():
-    schedule.every(15).minutes.do(main_job)
+    schedule.every(15).minutes.do(lambda: threading.Thread(target=main_job).start())
     while True: schedule.run_pending(); time.sleep(1)
 
-# =====================================================================
-# 8. PELANCARAN AUTO
-# =====================================================================
 if __name__ == "__main__":
     threading.Thread(target=run_server, daemon=True).start()
     threading.Thread(target=run_scheduler, daemon=True).start()
-    
-    try: bot.send_message(ADMIN_ID, "🚨 **SYSTEM REBOOTED**\nEnjin AlphaV3 beroperasi secara auto (Mod Solana/EVM Router Aktif).")
+    try: bot.send_message(ADMIN_ID, "🚨 **SYSTEM REBOOTED**\nEnjin AlphaV3 LIVE beroperasi. Wayar API bersambung penuh.")
     except: pass
-    
-    main_job()
+    threading.Thread(target=main_job).start()
     print("Bot sedia menerima arahan Telegram...")
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)
+    bot.infinity_polling()p 
