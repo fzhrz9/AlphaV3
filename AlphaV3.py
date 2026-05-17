@@ -29,14 +29,15 @@ MIN_24H_CHANGE = 5.0
 MAX_1H_CHANGE = -1.5   
 MIN_1H_CHANGE = -5.0   
 
+# Kategori CoinGecko Yang Telah Dikemaskini
 CORE_NARRATIVES = [
-    'artificial-intelligence', 'depin', 'real-world-assets-rwa', 'web3-gaming', 
-    'bitcoin-ecosystem', 'restaking', 'modular-network', 'socialfi', 'defi',
+    'artificial-intelligence', 'depin', 'real-world-assets-rwa', 'gaming', 
+    'bitcoin-ecosystem', 'restaking', 'layer-1', 'layer-2', 'defi',
     'solana-ecosystem', 'base-ecosystem'
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS (DITAMBAH CG_API_KEY UNTUK LALUAN VVIP)
+# 2. LIVE API FETCHERS 
 # =====================================================================
 def get_trending_categories():
     try:
@@ -54,14 +55,25 @@ def get_coins_in_category(category_id):
         return res if isinstance(res, list) else []
     except: return []
 
-def get_dexscreener_data(contract_address):
+# LOGIK BARU: Cari guna Simbol atau CA
+def get_dexscreener_data(query, search_type="symbol"):
     try:
-        url = f"https://api.dexscreener.com/latest/dex/tokens/{contract_address}"
+        if search_type == "symbol":
+            url = f"https://api.dexscreener.com/latest/dex/search?q={query}"
+        else:
+            url = f"https://api.dexscreener.com/latest/dex/tokens/{query}"
+            
         res = requests.get(url, timeout=10).json()
         if res.get('pairs'):
-            pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
-            chain_id = pair.get('chainId', 'unknown')
+            # Jika cari guna simbol, pastikan ia simbol yang tepat (bukan scam copy)
+            if search_type == "symbol":
+                valid_pairs = [p for p in res['pairs'] if p.get('baseToken', {}).get('symbol', '').upper() == query.upper()]
+                if not valid_pairs: return None
+                pair = sorted(valid_pairs, key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
+            else:
+                pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
             
+            chain_id = pair.get('chainId', 'unknown')
             created_at = pair.get('pairCreatedAt', 0)
             age_days = (int(time.time() * 1000) - created_at) / (1000 * 60 * 60 * 24) if created_at else 0
             age_display = f"{int(age_days)} Hari" if age_days >= 1 else f"{int(age_days * 24)} Jam"
@@ -76,6 +88,7 @@ def get_dexscreener_data(contract_address):
             return {
                 'name': pair.get('baseToken', {}).get('name', 'Unknown'),
                 'symbol': pair.get('baseToken', {}).get('symbol', 'TOKEN'),
+                'contract_address': pair.get('baseToken', {}).get('address', 'Unknown'),
                 'price_usd': float(pair.get('priceUsd', 0)),
                 'market_cap': float(pair.get('fdv', 0)), 
                 'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
@@ -94,7 +107,7 @@ def get_dexscreener_data(contract_address):
     except: return None
 
 # =====================================================================
-# 3. PENAPISAN & LIVE SECURITY API (KEKAL ASAL)
+# 3. PENAPISAN & LIVE SECURITY API 
 # =====================================================================
 def verify_security_live(network, contract_address):
     try:
@@ -115,7 +128,7 @@ def execute_sniper_protocol(dex_data):
     return True
 
 # =====================================================================
-# 4. ALGO TRADE SETUP & BROADCAST UI (KEKAL ULTRA-SHORT FORMAT ASAL)
+# 4. ALGO TRADE SETUP & BROADCAST UI 
 # =====================================================================
 def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     sec_status = verify_security_live(dex_data['network'], coin_info['contract_address'])
@@ -163,7 +176,7 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS (KEKAL ASAL + REHAT RATE LIMIT)
+# 5. ENJIN PENGIMBAS (LOGIK PENCARIAN SIMBOL)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -171,20 +184,26 @@ def run_live_scan(categories):
         coins = get_coins_in_category(cat)
         
         if not coins: 
-            print(f"   [!] Gagal dapat data. Berehat 15 saat...")
+            print(f"   [!] Gagal dapat senarai koin. Berehat 15 saat...")
             time.sleep(15)
             continue
             
         for coin in coins:
-            ca = next((addr for chain, addr in coin.get('platforms', {}).items() if addr and isinstance(addr, str) and len(addr) > 20), None)
-            if not ca: continue
-            
-            dex_data = get_dexscreener_data(ca)
+            # Menggunakan Simbol terus ke DexScreener (Bypass kelemahan CoinGecko)
+            sym = coin['symbol']
+            dex_data = get_dexscreener_data(sym, search_type="symbol")
             if not dex_data: continue
             
             if execute_sniper_protocol(dex_data):
-                print(f"   🔥 [LULUS] Signal ditemui untuk {coin['symbol'].upper()}!")
-                c_info = {'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'], 'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')}
+                print(f"   🔥 [LULUS] Signal ditemui untuk {sym.upper()}!")
+                c_info = {
+                    'name': dex_data['name'], 
+                    'symbol': dex_data['symbol'], 
+                    'id': coin['id'], 
+                    'contract_address': dex_data['contract_address'], 
+                    'narrative': cat, 
+                    'market_cap_rank': coin.get('market_cap_rank')
+                }
                 send_signal(c_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
         
         time.sleep(5) 
@@ -198,7 +217,7 @@ def main_job():
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
 # =====================================================================
-# 6. TELEGRAM COMMANDS & BULLETPROOF SCHEDULER (KEKAL ASAL)
+# 6. TELEGRAM COMMANDS & BULLETPROOF SCHEDULER 
 # =====================================================================
 @bot.message_handler(commands=['scan'])
 def cmd_scan(message): bot.reply_to(message, "⏳ Memaksa kitaran imbasan manual..."); threading.Thread(target=main_job).start()
@@ -214,9 +233,9 @@ def cmd_ca(message):
     try:
         address = message.text.split()[1]
         bot.reply_to(message, f"⚙️ DD Analisis CA:\n`{address}`", parse_mode="Markdown")
-        dex_data = get_dexscreener_data(address)
+        dex_data = get_dexscreener_data(address, search_type="ca") # Mode Carian CA
         if dex_data:
-            c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': address, 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
+            c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': dex_data['contract_address'], 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
             send_signal(c_info, dex_data, target_chat_id=message.chat.id)
         else: bot.reply_to(message, "❌ Data Dexscreener gagal ditarik.")
     except Exception as e: bot.reply_to(message, f"❌ Format salah. Taip: `/ca <contract_address>`", parse_mode="Markdown")
@@ -235,7 +254,7 @@ def run_scheduler():
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
     threading.Thread(target=run_scheduler, daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Ultra-Short UI, & VVIP API Key dimuatkan sepenuhnya.")
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Carian Simbol Pintar, & VVIP API Key dimuatkan sepenuhnya.")
     except: pass
     threading.Thread(target=main_job).start()
     bot.infinity_polling(timeout=20, long_polling_timeout=20)
