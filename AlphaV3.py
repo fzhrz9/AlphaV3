@@ -126,7 +126,7 @@ def execute_sniper_protocol(dex_data):
     return True
 
 # =====================================================================
-# 4. ALGO TRADE SETUP & BROADCAST UI (KEMBALI KE FORMAT GAMBAR SEMALAM)
+# 4. ALGO TRADE SETUP & BROADCAST UI 
 # =====================================================================
 def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_chat_id=VIP_CHANNEL_ID):
     sec_status = verify_security_live(dex_data['network'], coin_info['contract_address'])
@@ -148,61 +148,68 @@ def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_cha
     trend_sign = "+" if dex_data['price_change_24h'] >= 0 else ""
     m5_sign = "+" if dex_data['price_change_5m'] >= 0 else ""
 
-    msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
+    # GUNA HTML UNTUK PAKSA TELEGRAM BOLD KAN TAJUK
+    msg = f"""⚡ <b>ALPHA EXECUTION : {coin_info['narrative'].upper()}</b>
 
-**Asset Identified :** {coin_info['name']} (`${coin_info['symbol'].upper()}`)
-**Contract :** `{coin_info['contract_address']}`
+<b>Asset Identified :</b> {coin_info['name']} (<code>${coin_info['symbol'].upper()}</code>)
+<b>Contract :</b> <code>{coin_info['contract_address']}</code>
 
-📈 **MARKET METRICS (LIVE)**
-• **Valuation (FDV) :** `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank :** `#{coin_info.get('market_cap_rank', 'N/A')}`
-• **Trend 24H :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 | **Vol 24H :** `${dex_data['volume_24h'] / 1e6:.1f}M` 🟢
+📈 <b>MARKET METRICS (LIVE)</b>
+• <b>Valuation (FDV) :</b> <code>${dex_data['market_cap'] / 1e6:.1f}M</code> | <b>Rank :</b> <code>#{coin_info.get('market_cap_rank', 'N/A')}</code>
+• <b>Trend 24H :</b> <code>{trend_sign}{dex_data['price_change_24h']}%</code> 🟢 | <b>Vol 24H :</b> <code>${dex_data['volume_24h'] / 1e6:.1f}M</code> 🟢
 
-📊 **MOMENTUM VELOCITY (ON-CHAIN)**
-• **Macro (24H) :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 *(Bullish)*
-• **Micro (1H) :** `{dex_data['price_change_1h']}%` 🔴 *(Pullback)*
-• **Sniper (5M) :** `{m5_sign}{dex_data['price_change_5m']}%` 🟢 *(Reversal)*
+📊 <b>MOMENTUM VELOCITY (ON-CHAIN)</b>
+• <b>Macro (24H) :</b> <code>{trend_sign}{dex_data['price_change_24h']}%</code> 🟢 <i>(Bullish)</i>
+• <b>Micro (1H) :</b> <code>{dex_data['price_change_1h']}%</code> 🔴 <i>(Pullback)</i>
+• <b>Sniper (5M) :</b> <code>{m5_sign}{dex_data['price_change_5m']}%</code> 🟢 <i>(Reversal)</i>
 
-🎯 **TRADE SETUP (ALGO-GENERATED)**
-• **ENTRY ZONE :** `${entry:.6f}`
-• **STOP LOSS :** `${sl:.6f}` `(-8.0%)` 🚨
-• **TAKE PROFIT 1 :** `${tp1:.6f}` `(+10%)`
-• **TAKE PROFIT 2 :** `${tp2:.6f}` `(+25%)`
-• **TAKE PROFIT 3 :** `${tp3:.6f}` `(+50%)` 🚀
+🎯 <b>TRADE SETUP (ALGO-GENERATED)</b>
+• <b>ENTRY ZONE :</b> <code>${entry:.6f}</code>
+• <b>STOP LOSS :</b> <code>${sl:.6f}</code> <code>(-8.0%)</code> 🚨
+• <b>TAKE PROFIT 1 :</b> <code>${tp1:.6f}</code> <code>(+10%)</code>
+• <b>TAKE PROFIT 2 :</b> <code>${tp2:.6f}</code> <code>(+25%)</code>
+• <b>TAKE PROFIT 3 :</b> <code>${tp3:.6f}</code> <code>(+50%)</code> 🚀
 
-🌊 **ORDER FLOW & SECURITY**
-• **Turnover Ratio :** `{turnover_ratio:.1f}x Volume/Liquidity` 🔥
-• **Token Age :** `{dex_data['age_display']}`
-• **Network :** `{dex_data['network'].capitalize()}` | **Liquidity :** `${dex_data['liquidity'] / 1e6:.1f}M` 🟢
-• **Live Audit :** **{sec_status}**
+🌊 <b>ORDER FLOW & SECURITY</b>
+• <b>Turnover Ratio :</b> <code>{turnover_ratio:.1f}x Volume/Liquidity</code> 🔥
+• <b>Token Age :</b> <code>{dex_data['age_display']}</code>
+• <b>Network :</b> <code>{dex_data['network'].capitalize()}</code> | <b>Liquidity :</b> <code>${dex_data['liquidity'] / 1e6:.1f}M</code> 🟢
+• <b>Live Audit :</b> <b>{sec_status}</b>
 
-⚡ **VERDICT : {verdict}**
-_Entry divalidasi oleh momentum pantulan M5 & capital turnover._
+⚡ <b>VERDICT : {verdict}</b>
+<i>Entry divalidasi oleh momentum pantulan M5 & capital turnover.</i>
 """
     
-    markup = InlineKeyboardMarkup(row_width=3)
+    markup = InlineKeyboardMarkup()
     sym = coin_info['symbol'].upper()
+    
+    # SUSUNAN INLINE KEYBOARD TIRU GAMBAR 1 (BOT ALPHA)
+    # Baris 1: Beli (Satu butang penuh di atas)
+    markup.row(InlineKeyboardButton(buy_bot_name, url=buy_bot_link))
+    
+    # Baris 2: Chart & Info
     markup.row(
-        InlineKeyboardButton(buy_bot_name, url=buy_bot_link),
         InlineKeyboardButton("📊 Dexscreener", url=f"https://dexscreener.com/{chain_url}/{coin_info['contract_address']}"),
         InlineKeyboardButton("🦎 CoinGecko", url=f"https://www.coingecko.com/en/coins/{coin_info.get('id', '')}")
     )
     
+    # Baris 3: Berita & CEX
     markup.row(
         InlineKeyboardButton("📰 Berita X", url=f"https://twitter.com/search?q=%24{sym}"),
         InlineKeyboardButton("🟨 Binance", url=f"https://www.binance.com/en/trade/{sym}_USDT")
     )
 
+    # Baris 4: Sosial Media (Disusun kemas sederet kalau ada)
     social_buttons = []
     if dex_data.get('twitter_official'): social_buttons.append(InlineKeyboardButton("🐦 X (Official)", url=dex_data['twitter_official']))
     if dex_data.get('telegram'): social_buttons.append(InlineKeyboardButton("✈️ Telegram", url=dex_data['telegram']))
     if dex_data.get('website'): social_buttons.append(InlineKeyboardButton("🌐 Website", url=dex_data['website']))
     
     if social_buttons:
-        # Split social buttons into rows of 3 max
-        for i in range(0, len(social_buttons), 3):
-            markup.row(*social_buttons[i:i+3])
+        markup.row(*social_buttons)
 
-    bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
+    # TUKAR parse_mode="HTML" SUPAYA BOLD JADI JELAS
+    bot.send_message(target_chat_id, msg, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
 # 5. ENJIN PENGIMBAS (LOGIK PENCARIAN SIMBOL KEKAL)
