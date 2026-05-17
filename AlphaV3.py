@@ -99,7 +99,8 @@ def get_dexscreener_data(query, search_type="symbol"):
                 'age_display': age_display,
                 'website': website_url,
                 'twitter_official': twitter_url,
-                'telegram': telegram_url
+                'telegram': telegram_url,
+                'pair_address': pair.get('pairAddress', '')  # <--- WAJIB TAMBAH BARIS NI
             }
         return None
     except: return None
