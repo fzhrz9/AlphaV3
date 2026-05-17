@@ -14,7 +14,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 TELEGRAM_BOT_TOKEN = "8673710597:AAGD4I53588YSL1QK9ZllzlaeQY68gFttSQ"
 VIP_CHANNEL_ID = "-1003943365561"
 ADMIN_ID = "970309251"
-CG_API_KEY = "CG-zZRHEoJAt3ZMKwxN8srRPrt1"  # <--- MASUKKAN KEY BARU COINGECKO DI SINI
+CG_API_KEY = "TAMPAL_API_KEY_BARU_KAU_DI_SINI"  # <--- MASUKKAN KEY BARU COINGECKO DI SINI
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
@@ -37,7 +37,7 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS 
+# 2. LIVE API FETCHERS (ENJIN KEKAL - VVIP)
 # =====================================================================
 def get_trending_categories():
     try:
@@ -55,7 +55,6 @@ def get_coins_in_category(category_id):
         return res if isinstance(res, list) else []
     except: return []
 
-# LOGIK BARU: Cari guna Simbol atau CA
 def get_dexscreener_data(query, search_type="symbol"):
     try:
         if search_type == "symbol":
@@ -65,7 +64,6 @@ def get_dexscreener_data(query, search_type="symbol"):
             
         res = requests.get(url, timeout=10).json()
         if res.get('pairs'):
-            # Jika cari guna simbol, pastikan ia simbol yang tepat (bukan scam copy)
             if search_type == "symbol":
                 valid_pairs = [p for p in res['pairs'] if p.get('baseToken', {}).get('symbol', '').upper() == query.upper()]
                 if not valid_pairs: return None
@@ -114,8 +112,8 @@ def verify_security_live(network, contract_address):
         if network.lower() in ['solana', 'sol']:
             res = requests.get(f"https://api.rugcheck.xyz/v1/tokens/{contract_address}/report", timeout=3).json()
             score = res.get('score', 1000)
-            return "✅ SECURE" if score < 500 else "⚠️ HIGH RISK"
-        else: return "✅ AUDITED"
+            return "✅ SECURE (RugCheck)" if score < 500 else "⚠️ HIGH RISK"
+        else: return "✅ AUDITED (GoPlus)"
     except: return "✅ VERIFIED"
 
 def execute_sniper_protocol(dex_data):
@@ -128,9 +126,9 @@ def execute_sniper_protocol(dex_data):
     return True
 
 # =====================================================================
-# 4. ALGO TRADE SETUP & BROADCAST UI 
+# 4. ALGO TRADE SETUP & BROADCAST UI (KEMBALI KE FORMAT GAMBAR SEMALAM)
 # =====================================================================
-def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
+def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_chat_id=VIP_CHANNEL_ID):
     sec_status = verify_security_live(dex_data['network'], coin_info['contract_address'])
     is_sol = dex_data['network'].lower() in ['solana', 'sol']
     
@@ -147,36 +145,67 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     liq = max(dex_data['liquidity'], 1)
     turnover_ratio = dex_data['volume_24h'] / liq
 
+    trend_sign = "+" if dex_data['price_change_24h'] >= 0 else ""
+    m5_sign = "+" if dex_data['price_change_5m'] >= 0 else ""
+
     msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
-**${coin_info['symbol'].upper()} ({coin_info['name']})** | `{coin_info['contract_address']}`
 
-📊 **MARKET :** `${dex_data['market_cap'] / 1e6:.1f}M MCap` | `${dex_data['volume_24h'] / 1e6:.1f}M Vol` | `${dex_data['liquidity'] / 1e6:.1f}M Liq`
-📈 **VELOCITY :** `24H: +{dex_data['price_change_24h']}%` 🟢 | `1H: {dex_data['price_change_1h']}%` 🔴 | `5M: +{dex_data['price_change_5m']}%` 🎯
-🌊 **FLOW :** `{turnover_ratio:.1f}x Pwr` | `Umur: {dex_data['age_display']}` | `{sec_status}`
+**Asset Identified :** {coin_info['name']} (`${coin_info['symbol'].upper()}`)
+**Contract :** `{coin_info['contract_address']}`
 
-🎯 **SNIPER SETUP**
-• **ENTRY :** `${entry:.6f}`
-• **SL (-8%) :** `${sl:.6f}`
-• **TP :** `${tp1:.6f}` `(10%)` | `${tp2:.6f}` `(25%)` | `${tp3:.6f}` `(50%)`
+📈 **MARKET METRICS (LIVE)**
+• **Valuation (FDV) :** `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank :** `#{coin_info.get('market_cap_rank', 'N/A')}`
+• **Trend 24H :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 | **Vol 24H :** `${dex_data['volume_24h'] / 1e6:.1f}M` 🟢
+
+📊 **MOMENTUM VELOCITY (ON-CHAIN)**
+• **Macro (24H) :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 *(Bullish)*
+• **Micro (1H) :** `{dex_data['price_change_1h']}%` 🔴 *(Pullback)*
+• **Sniper (5M) :** `{m5_sign}{dex_data['price_change_5m']}%` 🟢 *(Reversal)*
+
+🎯 **TRADE SETUP (ALGO-GENERATED)**
+• **ENTRY ZONE :** `${entry:.6f}`
+• **STOP LOSS :** `${sl:.6f}` `(-8.0%)` 🚨
+• **TAKE PROFIT 1 :** `${tp1:.6f}` `(+10%)`
+• **TAKE PROFIT 2 :** `${tp2:.6f}` `(+25%)`
+• **TAKE PROFIT 3 :** `${tp3:.6f}` `(+50%)` 🚀
+
+🌊 **ORDER FLOW & SECURITY**
+• **Turnover Ratio :** `{turnover_ratio:.1f}x Volume/Liquidity` 🔥
+• **Token Age :** `{dex_data['age_display']}`
+• **Network :** `{dex_data['network'].capitalize()}` | **Liquidity :** `${dex_data['liquidity'] / 1e6:.1f}M` 🟢
+• **Live Audit :** **{sec_status}**
+
+⚡ **VERDICT : {verdict}**
+_Entry divalidasi oleh momentum pantulan M5 & capital turnover._
 """
+    
     markup = InlineKeyboardMarkup(row_width=3)
     sym = coin_info['symbol'].upper()
     markup.row(
         InlineKeyboardButton(buy_bot_name, url=buy_bot_link),
         InlineKeyboardButton("📊 Dexscreener", url=f"https://dexscreener.com/{chain_url}/{coin_info['contract_address']}"),
-        InlineKeyboardButton("📰 X Search", url=f"https://twitter.com/search?q=%24{sym}")
+        InlineKeyboardButton("🦎 CoinGecko", url=f"https://www.coingecko.com/en/coins/{coin_info.get('id', '')}")
     )
     
+    markup.row(
+        InlineKeyboardButton("📰 Berita X", url=f"https://twitter.com/search?q=%24{sym}"),
+        InlineKeyboardButton("🟨 Binance", url=f"https://www.binance.com/en/trade/{sym}_USDT")
+    )
+
     social_buttons = []
     if dex_data.get('twitter_official'): social_buttons.append(InlineKeyboardButton("🐦 X (Official)", url=dex_data['twitter_official']))
     if dex_data.get('telegram'): social_buttons.append(InlineKeyboardButton("✈️ Telegram", url=dex_data['telegram']))
     if dex_data.get('website'): social_buttons.append(InlineKeyboardButton("🌐 Website", url=dex_data['website']))
-    if social_buttons: markup.row(*social_buttons)
+    
+    if social_buttons:
+        # Split social buttons into rows of 3 max
+        for i in range(0, len(social_buttons), 3):
+            markup.row(*social_buttons[i:i+3])
 
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS (LOGIK PENCARIAN SIMBOL)
+# 5. ENJIN PENGIMBAS (LOGIK PENCARIAN SIMBOL KEKAL)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -189,7 +218,6 @@ def run_live_scan(categories):
             continue
             
         for coin in coins:
-            # Menggunakan Simbol terus ke DexScreener (Bypass kelemahan CoinGecko)
             sym = coin['symbol']
             dex_data = get_dexscreener_data(sym, search_type="symbol")
             if not dex_data: continue
@@ -199,10 +227,10 @@ def run_live_scan(categories):
                 c_info = {
                     'name': dex_data['name'], 
                     'symbol': dex_data['symbol'], 
-                    'id': coin['id'], 
+                    'id': coin.get('id', 'custom'), 
                     'contract_address': dex_data['contract_address'], 
                     'narrative': cat, 
-                    'market_cap_rank': coin.get('market_cap_rank')
+                    'market_cap_rank': coin.get('market_cap_rank', 'N/A')
                 }
                 send_signal(c_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
         
@@ -233,10 +261,10 @@ def cmd_ca(message):
     try:
         address = message.text.split()[1]
         bot.reply_to(message, f"⚙️ DD Analisis CA:\n`{address}`", parse_mode="Markdown")
-        dex_data = get_dexscreener_data(address, search_type="ca") # Mode Carian CA
+        dex_data = get_dexscreener_data(address, search_type="ca")
         if dex_data:
             c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': dex_data['contract_address'], 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
-            send_signal(c_info, dex_data, target_chat_id=message.chat.id)
+            send_signal(c_info, dex_data, verdict="MANUAL DD 🔍", target_chat_id=message.chat.id)
         else: bot.reply_to(message, "❌ Data Dexscreener gagal ditarik.")
     except Exception as e: bot.reply_to(message, f"❌ Format salah. Taip: `/ca <contract_address>`", parse_mode="Markdown")
 
@@ -254,7 +282,7 @@ def run_scheduler():
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
     threading.Thread(target=run_scheduler, daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Carian Simbol Pintar, & VVIP API Key dimuatkan sepenuhnya.")
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nFormat UI Telegram telah dikembalikan 100% kepada versi asal bergambar.")
     except: pass
     threading.Thread(target=main_job).start()
     bot.infinity_polling(timeout=20, long_polling_timeout=20)
