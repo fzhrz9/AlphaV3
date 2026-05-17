@@ -9,7 +9,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # =====================================================================
-# 1. KONFIGURASI & API KEYS (ALPHA V4 - PURE ON-CHAIN SNIPER)
+# 1. KONFIGURASI & API KEYS
 # =====================================================================
 TELEGRAM_BOT_TOKEN = "8673710597:AAGD4I53588YSL1QK9ZllzlaeQY68gFttSQ"
 VIP_CHANNEL_ID = "-1003943365561"
@@ -20,7 +20,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 IS_SCANNING = True
 CURRENT_ENGINE = 1  
 
-# PARAMETER PENAPISAN MUTLAK (SWEET SPOT)
+# PARAMETER PENAPISAN (SWEET SPOT)
 MC_MIN, MC_MAX = 5000000, 500000000
 MIN_LIQUIDITY = 250000
 MIN_VOL_MC_RATIO = 0.10
@@ -59,12 +59,10 @@ def get_dexscreener_data(contract_address):
             pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
             chain_id = pair.get('chainId', 'unknown')
             
-            # Kiraan Umur Koin
             created_at = pair.get('pairCreatedAt', 0)
             age_days = (int(time.time() * 1000) - created_at) / (1000 * 60 * 60 * 24) if created_at else 0
             age_display = f"{int(age_days)} Hari" if age_days >= 1 else f"{int(age_days * 24)} Jam"
             
-            # Pautan Dinamik Sosmed
             info = pair.get('info', {})
             websites = info.get('websites', [])
             website_url = websites[0].get('url') if websites else None
@@ -101,10 +99,8 @@ def verify_security_live(network, contract_address):
             res = requests.get(f"https://api.rugcheck.xyz/v1/tokens/{contract_address}/report", timeout=3).json()
             score = res.get('score', 1000)
             return "✅ SECURE" if score < 500 else "⚠️ HIGH RISK"
-        else:
-            return "✅ AUDITED"
-    except:
-        return "✅ VERIFIED"
+        else: return "✅ AUDITED"
+    except: return "✅ VERIFIED"
 
 def execute_sniper_protocol(dex_data):
     if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False
@@ -112,7 +108,7 @@ def execute_sniper_protocol(dex_data):
     if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False
     if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False
     if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False
-    if dex_data['price_change_5m'] <= 0: return False # Mesti ada pantulan M5
+    if dex_data['price_change_5m'] <= 0: return False 
     return True
 
 # =====================================================================
@@ -126,18 +122,15 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     buy_bot_link = f"https://t.me/{'bonkbot_bot' if is_sol else 'maestro'}?start={coin_info['contract_address']}"
     chain_url = dex_data.get('chain_raw', 'search?q=').lower()
 
-    # Matematik Setup Kuantitatif
     entry = dex_data['price_usd']
-    sl = entry * 0.92  # -8%
-    tp1 = entry * 1.10 # +10%
-    tp2 = entry * 1.25 # +25%
-    tp3 = entry * 1.50 # +50%
+    sl = entry * 0.92  
+    tp1 = entry * 1.10 
+    tp2 = entry * 1.25 
+    tp3 = entry * 1.50 
     
-    # Kiraan Capital Turnover (Buy Pressure Indicator)
     liq = max(dex_data['liquidity'], 1)
     turnover_ratio = dex_data['volume_24h'] / liq
 
-    # PAPARAN PADAT & MAMPAT (BOLD HEADERS)
     msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
 **${coin_info['symbol'].upper()} ({coin_info['name']})** | `{coin_info['contract_address']}`
 
@@ -151,8 +144,6 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
 • **TP :** `${tp1:.6f}` `(10%)` | `${tp2:.6f}` `(25%)` | `${tp3:.6f}` `(50%)`
 """
     markup = InlineKeyboardMarkup(row_width=3)
-    
-    # Butang Baris 1
     sym = coin_info['symbol'].upper()
     markup.row(
         InlineKeyboardButton(buy_bot_name, url=buy_bot_link),
@@ -160,7 +151,6 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
         InlineKeyboardButton("📰 X Search", url=f"https://twitter.com/search?q=%24{sym}")
     )
     
-    # Butang Dinamik Sosmed (Baris 2)
     social_buttons = []
     if dex_data.get('twitter_official'): social_buttons.append(InlineKeyboardButton("🐦 X (Official)", url=dex_data['twitter_official']))
     if dex_data.get('telegram'): social_buttons.append(InlineKeyboardButton("✈️ Telegram", url=dex_data['telegram']))
@@ -170,7 +160,7 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS (DENGAN HEARTBEAT & RATE-LIMIT CHECK)
+# 5. ENJIN PENGIMBAS (ANTI RATE-LIMIT)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -178,7 +168,8 @@ def run_live_scan(categories):
         coins = get_coins_in_category(cat)
         
         if not coins: 
-            print(f"   [!] Tiada data / CG Rate-Limited. Skip ke sektor lain.")
+            print(f"   [!] CG Rate-Limited. Berehat 15 saat elak ban...")
+            time.sleep(15)
             continue
             
         for coin in coins:
@@ -192,15 +183,14 @@ def run_live_scan(categories):
                 print(f"   🔥 [LULUS] Signal ditemui untuk {coin['symbol'].upper()}!")
                 c_info = {'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'], 'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')}
                 send_signal(c_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
-        time.sleep(3) 
+        
+        time.sleep(5) 
 
 def main_job():
     global IS_SCANNING, CURRENT_ENGINE
     if not IS_SCANNING: return
     
-    # NADI SISTEM (Log sentiasa hidup setiap 15 minit)
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] ⚙️ Kitaran Auto-Scan Bermula... (Sistem Stabil)")
-    
     if CURRENT_ENGINE == 1: run_live_scan(CORE_NARRATIVES); CURRENT_ENGINE = 2
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
@@ -232,28 +222,17 @@ class RenderHandler(BaseHTTPRequestHandler):
     def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b"AlphaV4 PRO ACTIVE & BULLETPROOF")
     def log_message(self, format, *args): pass
 
-# SISTEM PENJADUALAN KETEBALAN GRED INSTITUSI (ANTI-CRASH)
 def run_scheduler():
     schedule.every(15).minutes.do(lambda: threading.Thread(target=main_job).start())
     while True:
-        try:
-            schedule.run_pending()
-        except Exception as e:
-            print(f"\n[⚠️] Ralat Penjadualan dipintas: {e}. Meneruskan kitaran...")
+        try: schedule.run_pending()
+        except Exception as e: print(f"\n[⚠️] Ralat Penjadualan: {e}. Meneruskan kitaran...")
         time.sleep(1)
 
 if __name__ == "__main__":
-    # Server Web untuk Render Stay-Alive
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
-    
-    # Memulakan Penjadual (Scheduler) secara selamat
     threading.Thread(target=run_scheduler, daemon=True).start()
-    
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash & Format Ultra-Short dimuatkan.")
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Ultra-Short UI, & Anti-Rate Limit dimuatkan sepenuhnya.")
     except: pass
-    
-    # Pusingan Pertama sejurus bot dihidupkan
     threading.Thread(target=main_job).start()
-    
-    # Kekalkan Bot Telegram tanpa Crash (Timeout = 20s)
     bot.infinity_polling(timeout=20, long_polling_timeout=20)
