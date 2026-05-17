@@ -117,12 +117,13 @@ def verify_security_live(network, contract_address):
     except: return "✅ VERIFIED"
 
 def execute_sniper_protocol(dex_data):
-    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False
-    if dex_data['liquidity'] < MIN_LIQUIDITY: return False
-    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False
-    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False
-    if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False
-    if dex_data['price_change_5m'] <= 0: return False 
+    # ==========================================
+    # MOD UJIAN: LONGGARKAN SEMUA SYARAT KETAT
+    # ==========================================
+    # Asalkan koin tu ada liquidity lebih $10,000, KITA LULUSKAN TERUS!
+    if dex_data['liquidity'] < 10000: 
+        return False 
+    
     return True
 
 # =====================================================================
