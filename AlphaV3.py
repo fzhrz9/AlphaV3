@@ -32,8 +32,8 @@ MIN_1H_CHANGE = -5.0
 # Kategori CoinGecko Yang Telah Dikemaskini
 CORE_NARRATIVES = [
     'artificial-intelligence', 'depin', 'real-world-assets-rwa', 'gaming', 
-    'bitcoin-ecosystem', 'restaking', 'modular-network', 'socialfi', 'defi',
-    'solana-ecosystem', 'base-ecosystem'
+    'bitcoin-ecosystem', 'restaking', 'modular-network', 'socialfi', 'defi', 'binance-alpha-spotlight',
+    'solana-ecosystem', 'base-ecosystem','ai-agents', 'ai-applications', 'base-native', 'meme', 'smart-contract-platform', 'dog-themed'
 ]
 
 # =====================================================================
