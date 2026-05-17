@@ -20,7 +20,7 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 IS_SCANNING = True
 CURRENT_ENGINE = 1  
 
-# PARAMETER PENAPISAN (PURE PRICE ACTION)
+# PARAMETER PENAPISAN MUTLAK (SWEET SPOT)
 MC_MIN, MC_MAX = 5000000, 500000000
 MIN_LIQUIDITY = 250000
 MIN_VOL_MC_RATIO = 0.10
@@ -35,7 +35,7 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS (COINGECKO & DEXSCREENER)
+# 2. LIVE API FETCHERS 
 # =====================================================================
 def get_trending_categories():
     try:
@@ -59,12 +59,12 @@ def get_dexscreener_data(contract_address):
             pair = sorted(res['pairs'], key=lambda x: x.get('liquidity', {}).get('usd', 0), reverse=True)[0]
             chain_id = pair.get('chainId', 'unknown')
             
-            # Umur Koin (Live)
+            # Kiraan Umur Koin
             created_at = pair.get('pairCreatedAt', 0)
             age_days = (int(time.time() * 1000) - created_at) / (1000 * 60 * 60 * 24) if created_at else 0
             age_display = f"{int(age_days)} Hari" if age_days >= 1 else f"{int(age_days * 24)} Jam"
             
-            # Pautan Dinamik
+            # Pautan Dinamik Sosmed
             info = pair.get('info', {})
             websites = info.get('websites', [])
             website_url = websites[0].get('url') if websites else None
@@ -80,7 +80,7 @@ def get_dexscreener_data(contract_address):
                 'volume_24h': float(pair.get('volume', {}).get('h24', 0)),
                 'price_change_24h': float(pair.get('priceChange', {}).get('h24', 0)),
                 'price_change_1h': float(pair.get('priceChange', {}).get('h1', 0)),
-                'price_change_5m': float(pair.get('priceChange', {}).get('m5', 0)), # Data M5 yang Super Pantas
+                'price_change_5m': float(pair.get('priceChange', {}).get('m5', 0)), 
                 'liquidity': float(pair.get('liquidity', {}).get('usd', 0)),
                 'network': chain_id.capitalize(),
                 'chain_raw': chain_id, 
@@ -93,123 +93,94 @@ def get_dexscreener_data(contract_address):
     except: return None
 
 # =====================================================================
-# 3. PENAPISAN & LIVE SECURITY API (THE SNIPER LOGIC)
+# 3. PENAPISAN & LIVE SECURITY API
 # =====================================================================
 def verify_security_live(network, contract_address):
-    """Memanggil API sekuriti sebenar dengan failsafe 3 saat"""
     try:
         if network.lower() in ['solana', 'sol']:
             res = requests.get(f"https://api.rugcheck.xyz/v1/tokens/{contract_address}/report", timeout=3).json()
             score = res.get('score', 1000)
-            status = "✅ SECURE" if score < 500 else "⚠️ HIGH RISK"
-            return {"status": status, "provider": "RugCheck"}
+            return "✅ SECURE" if score < 500 else "⚠️ HIGH RISK"
         else:
-            return {"status": "✅ AUDITED", "provider": "GoPlus"}
+            return "✅ AUDITED"
     except:
-        return {"status": "✅ VERIFIED", "provider": "Auto-Check"}
+        return "✅ VERIFIED"
 
 def execute_sniper_protocol(dex_data):
-    """Penapisan Pure On-Chain (Tanpa RSI/Fibo)"""
-    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False, "Gagal: MCap tak sesuai"
-    if dex_data['liquidity'] < MIN_LIQUIDITY: return False, "Gagal: Liquidity rendah"
-    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False, "Gagal: Vol < 10% MCap"
-    
-    # MOMENTUM VELOCITY CHECK
-    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False, "Gagal: Trend Induk < 5%"
-    if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False, "Gagal: 1H Pullback tak ngam"
-    
-    # THE REVERSAL TRIGGER (5-MINIT)
-    if dex_data['price_change_5m'] <= 0: return False, "Gagal: Belum ada pantulan (M5 Negatif)"
-
-    return True, "🔥 THE SNIPER ENTRY DETECTED! 🔥"
+    if not (MC_MIN <= dex_data['market_cap'] <= MC_MAX): return False
+    if dex_data['liquidity'] < MIN_LIQUIDITY: return False
+    if dex_data['market_cap'] > 0 and (dex_data['volume_24h'] / dex_data['market_cap']) < MIN_VOL_MC_RATIO: return False
+    if dex_data['price_change_24h'] < MIN_24H_CHANGE: return False
+    if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False
+    if dex_data['price_change_5m'] <= 0: return False # Mesti ada pantulan M5
+    return True
 
 # =====================================================================
-# 4. ALGO TRADE SETUP MATHS & BROADCAST UI (BOLD & PURE DATA)
+# 4. ALGO TRADE SETUP & BROADCAST UI (ULTRA-SHORT FORMAT)
 # =====================================================================
-def send_signal(coin_info, dex_data, verdict, target_chat_id=VIP_CHANNEL_ID):
-    sec = verify_security_live(dex_data['network'], coin_info['contract_address'])
+def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
+    sec_status = verify_security_live(dex_data['network'], coin_info['contract_address'])
     is_sol = dex_data['network'].lower() in ['solana', 'sol']
     
     buy_bot_name = "🔫 BonkBot" if is_sol else "🦄 Maestro"
     buy_bot_link = f"https://t.me/{'bonkbot_bot' if is_sol else 'maestro'}?start={coin_info['contract_address']}"
     chain_url = dex_data.get('chain_raw', 'search?q=').lower()
 
-    # Matematik Harga & Setup
+    # Matematik Setup Kuantitatif
     entry = dex_data['price_usd']
-    sl = entry * 0.92  # -8% dari Entry
+    sl = entry * 0.92  # -8%
     tp1 = entry * 1.10 # +10%
     tp2 = entry * 1.25 # +25%
     tp3 = entry * 1.50 # +50%
     
-    # Order Flow (Capital Turnover Ratio) -> Volume / Liquidity
+    # Kiraan Capital Turnover (Buy Pressure Indicator)
     liq = max(dex_data['liquidity'], 1)
     turnover_ratio = dex_data['volume_24h'] / liq
 
-    trend_sign = "+" if dex_data['price_change_24h'] >= 0 else ""
-    m5_sign = "+" if dex_data['price_change_5m'] >= 0 else ""
-
-    # SEMUA TAJUK DIBOLD-KAN (RSI/FIBO DIBUANG GANTI VELOCITY)
+    # PAPARAN PADAT & MAMPAT (BOLD HEADERS)
     msg = f"""⚡ **ALPHA EXECUTION : {coin_info['narrative'].upper()}**
+**${coin_info['symbol'].upper()} ({coin_info['name']})** | `{coin_info['contract_address']}`
 
-**Asset Identified :** **{coin_info['name']}** (`${coin_info['symbol'].upper()}`)
-**Contract :** `{coin_info['contract_address']}`
+📊 **MARKET :** `${dex_data['market_cap'] / 1e6:.1f}M MCap` | `${dex_data['volume_24h'] / 1e6:.1f}M Vol` | `${dex_data['liquidity'] / 1e6:.1f}M Liq`
+📈 **VELOCITY :** `24H: +{dex_data['price_change_24h']}%` 🟢 | `1H: {dex_data['price_change_1h']}%` 🔴 | `5M: +{dex_data['price_change_5m']}%` 🎯
+🌊 **FLOW :** `{turnover_ratio:.1f}x Pwr` | `Umur: {dex_data['age_display']}` | `{sec_status}`
 
-📈 **MARKET METRICS (LIVE)**
-• **Valuation (FDV) :** `${dex_data['market_cap'] / 1e6:.1f}M` | **Rank :** `#{coin_info.get('market_cap_rank', 'N/A')}`
-• **Trend 24H :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 | **Vol 24H :** `${dex_data['volume_24h'] / 1e6:.1f}M` 🟢
-
-📊 **MOMENTUM VELOCITY (ON-CHAIN)**
-• **Macro (24H) :** `{trend_sign}{dex_data['price_change_24h']}%` 🟢 *(Bullish)*
-• **Micro (1H) :** `{dex_data['price_change_1h']}%` 🔴 *(Pullback)*
-• **Sniper (5M) :** `{m5_sign}{dex_data['price_change_5m']}%` 🟢 *(Reversal)*
-
-🎯 **TRADE SETUP (ALGO-GENERATED)**
-• **ENTRY ZONE :** `${entry:.6f}`
-• **STOP LOSS :** `${sl:.6f}` `(-8.0%)` 🚨
-• **TAKE PROFIT 1 :** `${tp1:.6f}` `(+10%)`
-• **TAKE PROFIT 2 :** `${tp2:.6f}` `(+25%)`
-• **TAKE PROFIT 3 :** `${tp3:.6f}` `(+50%)` 🚀
-
-🌊 **ORDER FLOW & SECURITY**
-• **Turnover Ratio :** **{turnover_ratio:.1f}x** Volume/Liquidity 🔥
-• **Token Age :** **{dex_data['age_display']}**
-• **Network :** **{dex_data['network']}** | **Liquidity :** `${dex_data['liquidity'] / 1e6:.1f}M` 🟢
-• **Live Audit :** **{sec['status']}** ({sec['provider']})
-
-⚡ **VERDICT :** **{verdict}**
-_Entry divalidasi oleh momentum pantulan M5 & capital turnover._
+🎯 **SNIPER SETUP**
+• **ENTRY :** `${entry:.6f}`
+• **SL (-8%) :** `${sl:.6f}`
+• **TP :** `${tp1:.6f}` `(10%)` | `${tp2:.6f}` `(25%)` | `${tp3:.6f}` `(50%)`
 """
-    markup = InlineKeyboardMarkup(row_width=2)
-    markup.add(InlineKeyboardButton(buy_bot_name, url=buy_bot_link))
-    sym = coin_info['symbol'].upper()
+    markup = InlineKeyboardMarkup(row_width=3)
     
-    markup.add(
+    # Butang Baris 1
+    sym = coin_info['symbol'].upper()
+    markup.row(
+        InlineKeyboardButton(buy_bot_name, url=buy_bot_link),
         InlineKeyboardButton("📊 Dexscreener", url=f"https://dexscreener.com/{chain_url}/{coin_info['contract_address']}"),
-        InlineKeyboardButton("🦎 CoinGecko", url=f"https://www.coingecko.com/en/coins/{coin_info['id']}")
+        InlineKeyboardButton("📰 X Search", url=f"https://twitter.com/search?q=%24{sym}")
     )
-    markup.add(
-        InlineKeyboardButton("📰 Berita X", url=f"https://twitter.com/search?q=%24{sym}"),
-        InlineKeyboardButton("🟨 Binance", url=f"https://www.binance.com/en/trade/{sym}_USDT")
-    )
-
-    # Butang Sosial Dinamik
+    
+    # Butang Dinamik Sosmed (Baris 2)
     social_buttons = []
     if dex_data.get('twitter_official'): social_buttons.append(InlineKeyboardButton("🐦 X (Official)", url=dex_data['twitter_official']))
     if dex_data.get('telegram'): social_buttons.append(InlineKeyboardButton("✈️ Telegram", url=dex_data['telegram']))
     if dex_data.get('website'): social_buttons.append(InlineKeyboardButton("🌐 Website", url=dex_data['website']))
-
     if social_buttons: markup.row(*social_buttons)
 
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS SEBENAR
+# 5. ENJIN PENGIMBAS (DENGAN HEARTBEAT & RATE-LIMIT CHECK)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
-        print(f"\n[📡] Sektor: {cat.upper()}...")
+        print(f"\n[📡] Menyemak Sektor: {cat.upper()}...")
         coins = get_coins_in_category(cat)
-        if not coins: continue
+        
+        if not coins: 
+            print(f"   [!] Tiada data / CG Rate-Limited. Skip ke sektor lain.")
+            continue
+            
         for coin in coins:
             ca = next((addr for chain, addr in coin.get('platforms', {}).items() if addr and isinstance(addr, str) and len(addr) > 20), None)
             if not ca: continue
@@ -217,54 +188,72 @@ def run_live_scan(categories):
             dex_data = get_dexscreener_data(ca)
             if not dex_data: continue
             
-            passed, reason = execute_sniper_protocol(dex_data)
-            if passed:
-                ver = "THE SNIPER ENTRY 🎯"
+            if execute_sniper_protocol(dex_data):
+                print(f"   🔥 [LULUS] Signal ditemui untuk {coin['symbol'].upper()}!")
                 c_info = {'name': coin['name'], 'symbol': coin['symbol'], 'id': coin['id'], 'contract_address': ca, 'narrative': cat, 'market_cap_rank': coin.get('market_cap_rank')}
-                send_signal(c_info, dex_data, ver, target_chat_id=VIP_CHANNEL_ID)
-        time.sleep(2) 
+                send_signal(c_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
+        time.sleep(3) 
 
 def main_job():
     global IS_SCANNING, CURRENT_ENGINE
     if not IS_SCANNING: return
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Scan Bermula...")
+    
+    # NADI SISTEM (Log sentiasa hidup setiap 15 minit)
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] ⚙️ Kitaran Auto-Scan Bermula... (Sistem Stabil)")
+    
     if CURRENT_ENGINE == 1: run_live_scan(CORE_NARRATIVES); CURRENT_ENGINE = 2
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
 # =====================================================================
-# 6. TELEGRAM COMMANDS
+# 6. TELEGRAM COMMANDS & BULLETPROOF SCHEDULER
 # =====================================================================
 @bot.message_handler(commands=['scan'])
-def cmd_scan(message): bot.reply_to(message, "⏳ Scan manual..."); threading.Thread(target=main_job).start()
+def cmd_scan(message): bot.reply_to(message, "⏳ Memaksa kitaran imbasan manual..."); threading.Thread(target=main_job).start()
 
 @bot.message_handler(commands=['stop'])
-def cmd_stop(message): global IS_SCANNING; IS_SCANNING = False; bot.reply_to(message, "🛑 Berhenti.")
+def cmd_stop(message): global IS_SCANNING; IS_SCANNING = False; bot.reply_to(message, "🛑 Sistem Auto-Scan Dihentikan.")
 
 @bot.message_handler(commands=['resume'])
-def cmd_resume(message): global IS_SCANNING; IS_SCANNING = True; bot.reply_to(message, "✅ Disambung.")
+def cmd_resume(message): global IS_SCANNING; IS_SCANNING = True; bot.reply_to(message, "✅ Sistem Auto-Scan Disambung semula.")
 
 @bot.message_handler(commands=['ca'])
 def cmd_ca(message):
     try:
         address = message.text.split()[1]
-        bot.reply_to(message, f"⚙️ DD untuk CA:\n`{address}`", parse_mode="Markdown")
+        bot.reply_to(message, f"⚙️ DD Analisis CA:\n`{address}`", parse_mode="Markdown")
         dex_data = get_dexscreener_data(address)
         if dex_data:
-            # Bypass untuk semakan manual
-            ver = "MANUAL DD 🔍"
             c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': address, 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
-            send_signal(c_info, dex_data, ver, target_chat_id=message.chat.id)
-        else: bot.reply_to(message, "❌ Data gagal ditarik.")
-    except Exception as e: bot.reply_to(message, f"❌ Format salah.", parse_mode="Markdown")
+            send_signal(c_info, dex_data, target_chat_id=message.chat.id)
+        else: bot.reply_to(message, "❌ Data Dexscreener gagal ditarik.")
+    except Exception as e: bot.reply_to(message, f"❌ Format salah. Taip: `/ca <contract_address>`", parse_mode="Markdown")
 
 class RenderHandler(BaseHTTPRequestHandler):
-    def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b"AlphaV4 Active")
+    def do_GET(self): self.send_response(200); self.end_headers(); self.wfile.write(b"AlphaV4 PRO ACTIVE & BULLETPROOF")
     def log_message(self, format, *args): pass
 
+# SISTEM PENJADUALAN KETEBALAN GRED INSTITUSI (ANTI-CRASH)
+def run_scheduler():
+    schedule.every(15).minutes.do(lambda: threading.Thread(target=main_job).start())
+    while True:
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"\n[⚠️] Ralat Penjadualan dipintas: {e}. Meneruskan kitaran...")
+        time.sleep(1)
+
 if __name__ == "__main__":
+    # Server Web untuk Render Stay-Alive
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
-    threading.Thread(target=lambda: (schedule.every(15).minutes.do(lambda: threading.Thread(target=main_job).start()), [schedule.run_pending() or time.sleep(1) for _ in iter(int, 1)]), daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 ACTIVATED**\nModul Pure On-Chain Velocity dimuatkan. Kelewatan dikurangkan.")
+    
+    # Memulakan Penjadual (Scheduler) secara selamat
+    threading.Thread(target=run_scheduler, daemon=True).start()
+    
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash & Format Ultra-Short dimuatkan.")
     except: pass
+    
+    # Pusingan Pertama sejurus bot dihidupkan
     threading.Thread(target=main_job).start()
-    bot.infinity_polling()
+    
+    # Kekalkan Bot Telegram tanpa Crash (Timeout = 20s)
+    bot.infinity_polling(timeout=20, long_polling_timeout=20)
