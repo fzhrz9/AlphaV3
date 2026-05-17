@@ -14,6 +14,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 TELEGRAM_BOT_TOKEN = "8673710597:AAGD4I53588YSL1QK9ZllzlaeQY68gFttSQ"
 VIP_CHANNEL_ID = "-1003943365561"
 ADMIN_ID = "970309251"
+CG_API_KEY = "CG-zZRHEoJAt3ZMKwxN8srRPrt1"  # <--- MASUKKAN KEY BARU KAU KAT SINI
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
@@ -35,19 +36,21 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS 
+# 2. LIVE API FETCHERS (LALUAN VVIP COINGECKO API KEY)
 # =====================================================================
 def get_trending_categories():
     try:
-        res = requests.get("https://api.coingecko.com/api/v3/coins/categories", timeout=10).json()
+        headers = {"x-cg-demo-api-key": CG_API_KEY}
+        res = requests.get("https://api.coingecko.com/api/v3/coins/categories", headers=headers, timeout=10).json()
         sorted_cats = sorted(res, key=lambda x: x.get('market_cap_change_24h', 0) or 0, reverse=True)
         return [cat['id'] for cat in sorted_cats[:3]]
     except: return []
 
 def get_coins_in_category(category_id):
     try:
+        headers = {"x-cg-demo-api-key": CG_API_KEY}
         url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&category={category_id}&order=market_cap_desc&per_page=15&page=1"
-        res = requests.get(url, timeout=10).json()
+        res = requests.get(url, headers=headers, timeout=10).json()
         return res if isinstance(res, list) else []
     except: return []
 
@@ -160,7 +163,7 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS (ANTI RATE-LIMIT)
+# 5. ENJIN PENGIMBAS (DENGAN KEY VVIP)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -168,7 +171,7 @@ def run_live_scan(categories):
         coins = get_coins_in_category(cat)
         
         if not coins: 
-            print(f"   [!] CG Rate-Limited. Berehat 15 saat elak ban...")
+            print(f"   [!] Gagal dapat data. Berehat 15 saat...")
             time.sleep(15)
             continue
             
@@ -190,7 +193,7 @@ def main_job():
     global IS_SCANNING, CURRENT_ENGINE
     if not IS_SCANNING: return
     
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] ⚙️ Kitaran Auto-Scan Bermula... (Sistem Stabil)")
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] ⚙️ Kitaran Auto-Scan Bermula... (VVIP API Aktif)")
     if CURRENT_ENGINE == 1: run_live_scan(CORE_NARRATIVES); CURRENT_ENGINE = 2
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
@@ -232,7 +235,7 @@ def run_scheduler():
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
     threading.Thread(target=run_scheduler, daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Ultra-Short UI, & Anti-Rate Limit dimuatkan sepenuhnya.")
+    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nModul Anti-Crash, Ultra-Short UI, & VVIP API Key dimuatkan sepenuhnya.")
     except: pass
     threading.Thread(target=main_job).start()
     bot.infinity_polling(timeout=20, long_polling_timeout=20)
