@@ -14,7 +14,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 TELEGRAM_BOT_TOKEN = "8673710597:AAGD4I53588YSL1QK9ZllzlaeQY68gFttSQ"
 VIP_CHANNEL_ID = "-1003943365561"
 ADMIN_ID = "970309251"
-CG_API_KEY = "CG-zZRHEoJAt3ZMKwxN8srRPrt1"  # <--- MASUKKAN KEY BARU KAU KAT SINI
+CG_API_KEY = "CG-zZRHEoJAt3ZMKwxN8srRPrt1"  # <--- MASUKKAN KEY BARU COINGECKO DI SINI
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
@@ -36,7 +36,7 @@ CORE_NARRATIVES = [
 ]
 
 # =====================================================================
-# 2. LIVE API FETCHERS (LALUAN VVIP COINGECKO API KEY)
+# 2. LIVE API FETCHERS (DITAMBAH CG_API_KEY UNTUK LALUAN VVIP)
 # =====================================================================
 def get_trending_categories():
     try:
@@ -94,7 +94,7 @@ def get_dexscreener_data(contract_address):
     except: return None
 
 # =====================================================================
-# 3. PENAPISAN & LIVE SECURITY API
+# 3. PENAPISAN & LIVE SECURITY API (KEKAL ASAL)
 # =====================================================================
 def verify_security_live(network, contract_address):
     try:
@@ -115,7 +115,7 @@ def execute_sniper_protocol(dex_data):
     return True
 
 # =====================================================================
-# 4. ALGO TRADE SETUP & BROADCAST UI (ULTRA-SHORT FORMAT)
+# 4. ALGO TRADE SETUP & BROADCAST UI (KEKAL ULTRA-SHORT FORMAT ASAL)
 # =====================================================================
 def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     sec_status = verify_security_live(dex_data['network'], coin_info['contract_address'])
@@ -163,7 +163,7 @@ def send_signal(coin_info, dex_data, target_chat_id=VIP_CHANNEL_ID):
     bot.send_message(target_chat_id, msg, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # =====================================================================
-# 5. ENJIN PENGIMBAS (DENGAN KEY VVIP)
+# 5. ENJIN PENGIMBAS (KEKAL ASAL + REHAT RATE LIMIT)
 # =====================================================================
 def run_live_scan(categories):
     for cat in categories:
@@ -198,7 +198,7 @@ def main_job():
     elif CURRENT_ENGINE == 2: run_live_scan(get_trending_categories()); CURRENT_ENGINE = 1
 
 # =====================================================================
-# 6. TELEGRAM COMMANDS & BULLETPROOF SCHEDULER
+# 6. TELEGRAM COMMANDS & BULLETPROOF SCHEDULER (KEKAL ASAL)
 # =====================================================================
 @bot.message_handler(commands=['scan'])
 def cmd_scan(message): bot.reply_to(message, "⏳ Memaksa kitaran imbasan manual..."); threading.Thread(target=main_job).start()
