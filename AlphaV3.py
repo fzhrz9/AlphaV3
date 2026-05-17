@@ -154,11 +154,11 @@ def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_cha
 <b>Asset Identified :</b> {coin_info['name']} (<code>${coin_info['symbol'].upper()}</code>)
 <b>Contract :</b> <code>{coin_info['contract_address']}</code>
 
-📈 <b>MARKET METRICS (LIVE)</b>
+📈 <b>MARKET (LIVE)</b>
 • <b>Valuation (FDV) :</b> <code>${dex_data['market_cap'] / 1e6:.1f}M</code> | <b>Rank :</b> <code>#{coin_info.get('market_cap_rank', 'N/A')}</code>
 • <b>Trend 24H :</b> <code>{trend_sign}{dex_data['price_change_24h']}%</code> 🟢 | <b>Vol 24H :</b> <code>${dex_data['volume_24h'] / 1e6:.1f}M</code> 🟢
 
-📊 <b>MOMENTUM VELOCITY (ON-CHAIN)</b>
+📊 <b>MOMENTUM VELOCITY</b>
 • <b>Macro (24H) :</b> <code>{trend_sign}{dex_data['price_change_24h']}%</code> 🟢 <i>(Bullish)</i>
 • <b>Micro (1H) :</b> <code>{dex_data['price_change_1h']}%</code> 🔴 <i>(Pullback)</i>
 • <b>Sniper (5M) :</b> <code>{m5_sign}{dex_data['price_change_5m']}%</code> 🟢 <i>(Reversal)</i>
@@ -271,8 +271,11 @@ def cmd_ca(message):
         dex_data = get_dexscreener_data(address, search_type="ca")
         if dex_data:
             c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': dex_data['contract_address'], 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
-            send_signal(c_info, dex_data, verdict="MANUAL DD 🔍", target_chat_id=message.chat.id)
-        else: bot.reply_to(message, "❌ Data Dexscreener gagal ditarik.")
+            # Tembak signal terus ke VIP Channel
+            send_signal(c_info, dex_data, verdict="MANUAL DD 🔍", target_chat_id=VIP_CHANNEL_ID)
+            # Bot beritahu kau di DM bahawa kerja dah siap
+            bot.reply_to(message, "✅ Signal blast successfully!")
+        else: bot.reply_to(message, "❌ Data Dexscreener gagal diexecute.")
     except Exception as e: bot.reply_to(message, f"❌ Format salah. Taip: `/ca <contract_address>`", parse_mode="Markdown")
 
 class RenderHandler(BaseHTTPRequestHandler):
@@ -289,7 +292,7 @@ def run_scheduler():
 if __name__ == "__main__":
     threading.Thread(target=lambda: HTTPServer(('0.0.0.0', int(os.environ.get("PORT", 8080))), RenderHandler).serve_forever(), daemon=True).start()
     threading.Thread(target=run_scheduler, daemon=True).start()
-    try: bot.send_message(ADMIN_ID, "🚨 **ALPHA V4 PRO ACTIVATED**\nFormat UI Telegram telah dikembalikan 100% kepada versi asal bergambar.")
+    try: bot.send_message(ADMIN_ID, "🚨 HELLO, ALPHA V4 PRO ACTIVATED")
     except: pass
     threading.Thread(target=main_job).start()
     bot.infinity_polling(timeout=20, long_polling_timeout=20)
