@@ -231,13 +231,18 @@ def run_live_scan(categories):
             
             if execute_sniper_protocol(dex_data):
                 print(f"   🔥 [LULUS] Signal ditemui untuk {sym.upper()}!")
+                
+                # --- SISTEM PENAPIS RANK AUTO-SCAN ---
+                raw_rank = coin.get('market_cap_rank')
+                final_rank = str(raw_rank) if raw_rank else "N/A"
+                
                 c_info = {
                     'name': dex_data['name'], 
                     'symbol': dex_data['symbol'], 
-                    'id': coin.get('id', 'custom'), 
+                    'id': coin.get('id', coin['name'].lower().replace(" ", "-")), 
                     'contract_address': dex_data['contract_address'], 
                     'narrative': cat, 
-                    'market_cap_rank': coin.get('market_cap_rank', 'N/A')
+                    'market_cap_rank': final_rank
                 }
                 send_signal(c_info, dex_data, target_chat_id=VIP_CHANNEL_ID)
         
@@ -270,7 +275,26 @@ def cmd_ca(message):
         bot.reply_to(message, f"⚙️ DD Analisis CA:\n`{address}`", parse_mode="Markdown")
         dex_data = get_dexscreener_data(address, search_type="ca")
         if dex_data:
-            c_info = {'name': dex_data['name'], 'symbol': dex_data['symbol'], 'id': 'custom', 'contract_address': dex_data['contract_address'], 'narrative': 'Manual-DD', 'market_cap_rank': 'N/A'}
+            # --- ARAHKAN BOT TANYA RANK DI COINGECKO BERDASARKAN SIMBOL ---
+            headers = {"x-cg-demo-api-key": CG_API_KEY}
+            rank_find = "N/A"
+            cg_id = dex_data['name'].lower().replace(" ", "-")
+            try:
+                search_res = requests.get(f"https://api.coingecko.com/api/v3/search?query={dex_data['symbol']}", headers=headers, timeout=5).json()
+                if search_res.get('coins'):
+                    exact_coin = next((c for c in search_res['coins'] if c['symbol'].upper() == dex_data['symbol'].upper()), search_res['coins'][0])
+                    rank_find = exact_coin.get('market_cap_rank') or "N/A"
+                    cg_id = exact_coin.get('id') or cg_id
+            except: pass
+
+            c_info = {
+                'name': dex_data['name'], 
+                'symbol': dex_data['symbol'], 
+                'id': cg_id, 
+                'contract_address': dex_data['contract_address'], 
+                'narrative': 'Manual-DD', 
+                'market_cap_rank': str(rank_find)
+            }
             # Tembak signal terus ke VIP Channel
             send_signal(c_info, dex_data, verdict="MANUAL DD 🔍", target_chat_id=VIP_CHANNEL_ID)
             # Bot beritahu kau di DM bahawa kerja dah siap
