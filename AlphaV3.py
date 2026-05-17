@@ -125,14 +125,13 @@ def execute_sniper_protocol(dex_data):
     if not (MIN_1H_CHANGE <= dex_data['price_change_1h'] <= MAX_1H_CHANGE): return False
     if dex_data['price_change_5m'] <= 0: return False 
     return True
-def calculate_rsi_fibo_live(network, pair_address):
+def calculate_rsi_fibo_live(network, pair_address, current_live_price):
     try:
         if not pair_address: return "N/A", "N/A"
-        # Sinkronkan kod nama rantaian ke format database GeckoTerminal
+        
         net_map = {'solana': 'solana', 'base': 'base', 'ton': 'ton', 'sui': 'sui', 'ethereum': 'eth', 'bsc': 'bsc'}
         gt_net = net_map.get(network.lower(), network.lower())
         
-        # Ambil data lilin harian (OHLCV) secara real-time (Maksimum 30 hari ke belakang)
         url = f"https://api.geckoterminal.com/api/v2/networks/{gt_net}/pools/{pair_address}/ohlcv/day?limit=30"
         res = requests.get(url, timeout=5).json()
         ohlcv_list = res.get('data', {}).get('attributes', {}).get('ohlcv_list', [])
@@ -140,13 +139,11 @@ def calculate_rsi_fibo_live(network, pair_address):
         if len(ohlcv_list) < 14:
             return "Koin Baru (Data < 14D)", "Data Tidak Mencukupi"
         
-        # Format GeckoTerminal: [timestamp, open, high, low, close, volume]
-        # Urutkan dari data paling lama ke paling baru untuk formula RSI
         closes = [float(x[4]) for x in ohlcv_list[::-1]]
         highs = [float(x[2]) for x in ohlcv_list]
         lows = [float(x[3]) for x in ohlcv_list]
         
-        # --- FORMULA MATEMATIK PURE RSI (14 PERIOD) ---
+        # --- FORMULA RSI ---
         gains, losses = [], []
         for i in range(1, len(closes)):
             diff = closes[i] - closes[i-1]
@@ -161,31 +158,29 @@ def calculate_rsi_fibo_live(network, pair_address):
             avg_loss = (avg_loss * 13 + losses[i]) / 14
             
         rsi_val = 100 if avg_loss == 0 else 100 - (100 / (1 + (avg_gain / avg_loss)))
-        rsi_status = f"{rsi_val:.1f} 🟢 (Oversold/Buy Zone)" if rsi_val <= 35 else f"{rsi_val:.1f} 🔴 (Overbought)" if rsi_val >= 70 else f"{rsi_val:.1f} ⚪ (Neutral)"
+        rsi_status = f"{rsi_val:.1f} 🟢 (Oversold)" if rsi_val <= 35 else f"{rsi_val:.1f} 🔴 (Overbought)" if rsi_val >= 70 else f"{rsi_val:.1f} ⚪ (Neutral)"
         
-        # --- FORMULA MATHEMATIC FIBONACCI RETRACEMENT ---
+        # --- FORMULA FIBO REAL-TIME HYBRID ---
         max_high = max(highs)
         min_low = min(lows)
         total_range = max_high - min_low
         
-        # Mengira Titik Emas (Golden Pocket 0.618) dan Titik Tengah (0.5)
         fibo_618 = max_high - (0.618 * total_range)
         fibo_50 = max_high - (0.50 * total_range)
-        current_price = closes[-1]
         
-        # Logik mengesan zon kedudukan harga semasa
-        if current_price <= min_low:
+        # KITA GUNA HARGA DEXSCREENER SEBAGAI PEMICU!
+        if current_live_price <= min_low:
             fibo_status = "🚨 Menembusi Lantai Support Utama!"
-        elif abs(current_price - fibo_618) / fibo_618 <= 0.04:
+        elif abs(current_live_price - fibo_618) / fibo_618 <= 0.04:
             fibo_status = "🔥 Menguji Golden Pocket (0.618) - Reversal Kuat!"
-        elif current_price >= max_high:
+        elif current_live_price >= max_high:
             fibo_status = "🚀 Price Discovery Mode (Breakout High)!"
         else:
             fibo_status = f"S: ${min_low:.4f} | R: ${max_high:.4f} (Mid: 0.50 @ ${fibo_50:.4f})"
             
         return rsi_status, fibo_status
     except:
-        return "N/A (API Timeout)", "N/A (API Timeout)"
+        return "N/A (API Error)", "N/A (API Error)"
 
 # =====================================================================
 # 4. ALGO TRADE SETUP & BROADCAST UI 
@@ -195,7 +190,7 @@ def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_cha
     is_sol = dex_data['network'].lower() in ['solana', 'sol']
     
     # --- PANGGIL ENJIN QUANT RSI & FIBO REAL-TIME ---
-    live_rsi, live_fibo = calculate_rsi_fibo_live(dex_data['network'], dex_data.get('pair_address', ''))
+    live_rsi, live_fibo = calculate_rsi_fibo_live(dex_data['network'], dex_data.get('pair_address', ''), dex_data['price_usd'])
     
     buy_bot_name = "🔫 BonkBot" if is_sol else "🦄 Maestro"
     buy_bot_link = f"https://t.me/{'bonkbot_bot' if is_sol else 'maestro'}?start={coin_info['contract_address']}"
@@ -230,8 +225,8 @@ def send_signal(coin_info, dex_data, verdict="THE SNIPER ENTRY 🎯", target_cha
 📊 <b>MOMENTUM VELOCITY & QUANT STRUCTURE</b>
 • <b>Macro (24H) :</b> <code>{trend_sign}{dex_data['price_change_24h']}%</code> 🟢
 • <b>Sniper (5M) :</b> <code>{m5_sign}{dex_data['price_change_5m']}%</code> 🟢
-• <b>RSI (14D) :</b> <code>{live_rsi}</code> ⚡
-• <b>Fibo Level :</b> <code>{live_fibo}</code> 🎯
+• <b>RSI (14D) :</b> <code>{live_rsi}</code>
+• <b>Fibo Level :</b> <code>{live_fibo}</code>
 
 🎯 <b>TRADE SETUP (ALGO-GENERATED)</b>
 • <b>ENTRY ZONE :</b> <code>${entry:.6f}</code>
